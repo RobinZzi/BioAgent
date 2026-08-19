@@ -1,0 +1,511 @@
+"""BioAgent REST API（v0.1）。见 docs/TECHNICAL_DESIGN.md §7。"""
+import threading
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
+
+from ..capabilities.definitions import CAPABILITIES_BY_ID, get_capability, list_capabilities
+from ..db import SessionLocal, get_db
+from ..env.discovery import discover_local
+from ..env.manifest import Manifest
+from ..models import (
+    AnalysisEvent, Artifact, ComputeEnvironment, Conversation, Dataset,
+    DatasetType, EnvStatus, EnvType, EventStatus, Message, MessageRole,
+    Project, new_id, utcnow,
+)
+from ..schemas import (
+    ArtifactOut, CapabilityOut, ConversationOut, DagOut, DatasetOut,
+    DatasetRegister, EnvironmentOut, EventOut, IntentRequest, IntentResponse,
+    MessageOut, MessageResult, MessageSend, ProjectCreate, ProjectDetail,
+    ProjectOut, RegisterRemoteBody, RerunBody, ResolveOut, SetEnvironmentBody,
+)
+from ..services import agent as agent_svc
+from ..services import dag as dag_svc
+from ..services.execution import project_dir
+from ..config import settings
+
+router = APIRouter(prefix="/api")
+
+
+# ================================================================ 工具函数
+
+def _project_out(p: Project, db: Session) -> ProjectOut:
+    return ProjectOut(
+        id=p.id, name=p.name, description=p.description,
+        data_source=p.data_source.value if hasattr(p.data_source, "value") else p.data_source,
+        compute_location=p.compute_location.value if hasattr(p.compute_location, "value") else p.compute_location,
+        created_at=p.created_at,
+        n_conversations=len(p.conversations),
+        n_datasets=len(p.datasets),
+        n_events=len(p.events),
+    )
+
+
+def _conversation_out(c: Conversation) -> ConversationOut:
+    return ConversationOut(
+        id=c.id, project_id=c.project_id, title=c.title,
+        current_dataset_id=c.current_dataset_id, current_phase=c.current_phase,
+        active_environment_id=c.active_environment_id, active_runtime_id=c.active_runtime_id,
+        analysis_state=c.analysis_state or {}, created_at=c.created_at,
+    )
+
+
+def _dataset_out(d: Dataset) -> DatasetOut:
+    return DatasetOut(
+        id=d.id, name=d.name,
+        dtype=d.dtype.value if hasattr(d.dtype, "value") else d.dtype,
+        format=d.format, location=d.location,
+        phase=d.phase, parent_dataset_id=d.parent_dataset_id,
+        source_event_id=d.source_event_id, metadata=d.metadata_ or {},
+        created_at=d.created_at,
+    )
+
+
+def _env_out(e: ComputeEnvironment) -> EnvironmentOut:
+    return EnvironmentOut(
+        id=e.id, project_id=e.project_id, name=e.name,
+        env_type=e.env_type.value if hasattr(e.env_type, "value") else e.env_type,
+        manifest=e.manifest or {}, status=e.status.value if hasattr(e.status, "value") else e.status,
+        connector_url=e.connector_url,
+        discovered_at=e.discovered_at,
+    )
+
+
+def _artifact_out(a: Artifact) -> ArtifactOut:
+    return ArtifactOut(
+        id=a.id, event_id=a.event_id, kind=a.kind.value if hasattr(a.kind, "value") else a.kind,
+        name=a.name, path=a.path, mime=a.mime, size_bytes=a.size_bytes, created_at=a.created_at,
+    )
+
+
+def _event_out(ev: AnalysisEvent, db: Session) -> EventOut:
+    arts = db.query(Artifact).filter(Artifact.event_id == ev.id).all()
+    return EventOut(
+        id=ev.id, project_id=ev.project_id, conversation_id=ev.conversation_id,
+        message_id=ev.message_id, capability_id=ev.capability_id,
+        implementation=ev.implementation, runtime_id=ev.runtime_id,
+        environment_id=ev.environment_id, inputs=ev.inputs or {}, parameters=ev.parameters or {},
+        status=ev.status.value if hasattr(ev.status, "value") else ev.status,
+        error=ev.error, started_at=ev.started_at, finished_at=ev.finished_at,
+        output=ev.output or {}, metrics=ev.metrics or {}, log_path=ev.log_path,
+        artifacts=[_artifact_out(a) for a in arts], created_at=ev.created_at,
+    )
+
+
+def _get_project(db: Session, project_id: str) -> Project:
+    p = db.get(Project, project_id)
+    if p is None:
+        raise HTTPException(404, f"项目不存在: {project_id}")
+    return p
+
+
+def _get_conversation(db: Session, conv_id: str) -> Conversation:
+    c = db.get(Conversation, conv_id)
+    if c is None:
+        raise HTTPException(404, f"对话不存在: {conv_id}")
+    return c
+
+
+def _get_event(db: Session, event_id: str) -> AnalysisEvent:
+    e = db.get(AnalysisEvent, event_id)
+    if e is None:
+        raise HTTPException(404, f"分析事件不存在: {event_id}")
+    return e
+
+
+# ================================================================ 健康检查
+
+@router.get("/health")
+def health():
+    return {"status": "ok", "app": settings.app_name, "version": settings.version}
+
+
+# ================================================================ Projects
+
+@router.get("/projects", response_model=list[ProjectOut])
+def list_projects(db: Session = Depends(get_db)):
+    projects = db.query(Project).order_by(Project.created_at.desc()).all()
+    return [_project_out(p, db) for p in projects]
+
+
+@router.post("/projects", response_model=ProjectOut, status_code=201)
+def create_project(body: ProjectCreate, db: Session = Depends(get_db)):
+    p = Project(id=new_id("proj"), name=body.name, description=body.description,
+                data_source=body.data_source, compute_location=body.compute_location)
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return _project_out(p, db)
+
+
+@router.get("/projects/{project_id}", response_model=ProjectDetail)
+def project_detail(project_id: str, db: Session = Depends(get_db)):
+    p = _get_project(db, project_id)
+    convs = db.query(Conversation).filter(Conversation.project_id == project_id).all()
+    dss = db.query(Dataset).filter(Dataset.project_id == project_id).order_by(
+        Dataset.created_at.asc()).all()
+    envs = db.query(ComputeEnvironment).filter(
+        ComputeEnvironment.project_id == project_id).all()
+    return ProjectDetail(
+        project=_project_out(p, db),
+        conversations=[_conversation_out(c) for c in convs],
+        datasets=[_dataset_out(d) for d in dss],
+        environments=[_env_out(e) for e in envs],
+        dag=dag_svc.build_dag(db, project_id),
+    )
+
+
+# ================================================================ Conversations
+
+@router.post("/projects/{project_id}/conversations", response_model=ConversationOut, status_code=201)
+def create_conversation(project_id: str, db: Session = Depends(get_db)):
+    p = _get_project(db, project_id)
+    c = Conversation(id=new_id("conv"), project_id=p.id, title=p.name + " 分析")
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    return _conversation_out(c)
+
+
+@router.get("/conversations/{conv_id}", response_model=dict)
+def conversation_detail(conv_id: str, db: Session = Depends(get_db)):
+    c = _get_conversation(db, conv_id)
+    msgs = db.query(Message).filter(Message.conversation_id == conv_id).order_by(
+        Message.created_at.asc()).all()
+    events = db.query(AnalysisEvent).filter(AnalysisEvent.conversation_id == conv_id).order_by(
+        AnalysisEvent.created_at.asc()).all()
+    return {
+        "conversation": _conversation_out(c),
+        "messages": [MessageOut(id=m.id, role=m.role.value if hasattr(m.role, "value") else m.role,
+                                content=m.content, triggered_event_ids=m.triggered_event_ids or [],
+                                created_at=m.created_at).model_dump() for m in msgs],
+        "events": [_event_out(e, db) for e in events],
+    }
+
+
+@router.post("/conversations/{conv_id}/messages", response_model=MessageResult)
+def send_message(conv_id: str, body: MessageSend, db: Session = Depends(get_db)):
+    c = _get_conversation(db, conv_id)
+
+    if not body.wait:
+        # 异步：用户消息与占位助手消息立即可见，线程执行并回填
+        user_msg = Message(conversation_id=c.id, role=MessageRole.user, content=body.content)
+        placeholder = Message(conversation_id=c.id, role=MessageRole.assistant,
+                              content="⏳ 分析执行中…（可在右侧 DAG 面板查看事件状态）")
+        db.add(user_msg)
+        db.add(placeholder)
+        db.commit()
+
+        def _run():
+            s = SessionLocal()
+            try:
+                conv = s.get(Conversation, c.id)
+                agent_svc.handle_message(s, conv, body.content,
+                                         user_msg=user_msg, assistant_msg=placeholder)
+            finally:
+                s.close()
+
+        threading.Thread(target=_run, daemon=True).start()
+        return MessageResult(
+            user_message=MessageOut(id=user_msg.id, role="user", content=user_msg.content,
+                                    triggered_event_ids=[], created_at=user_msg.created_at),
+            assistant_message=MessageOut(id=placeholder.id, role="assistant",
+                                         content=placeholder.content, triggered_event_ids=[],
+                                         created_at=placeholder.created_at),
+            events=[])
+
+    result = agent_svc.handle_message(db, c, body.content)
+    return MessageResult(
+        user_message=MessageOut(id=result["user_message"].id, role="user",
+                                content=result["user_message"].content,
+                                triggered_event_ids=result["user_message"].triggered_event_ids or [],
+                                created_at=result["user_message"].created_at),
+        assistant_message=MessageOut(id=result["assistant_message"].id, role="assistant",
+                                     content=result["assistant_message"].content,
+                                     triggered_event_ids=[],
+                                     created_at=result["assistant_message"].created_at),
+        events=[_event_out(e, db) for e in result["events"]],
+    )
+
+
+# ================================================================ Datasets
+
+@router.get("/projects/{project_id}/datasets", response_model=list[DatasetOut])
+def list_datasets(project_id: str, db: Session = Depends(get_db)):
+    _get_project(db, project_id)
+    dss = db.query(Dataset).filter(Dataset.project_id == project_id).order_by(
+        Dataset.created_at.asc()).all()
+    return [_dataset_out(d) for d in dss]
+
+
+@router.post("/projects/{project_id}/datasets", response_model=DatasetOut, status_code=201)
+def register_dataset(project_id: str, body: DatasetRegister, db: Session = Depends(get_db)):
+    p = _get_project(db, project_id)
+    location = body.location
+    if not location:
+        # 生成 mock 占位文件
+        pd = project_dir(project_id) / "datasets"
+        pd.mkdir(parents=True, exist_ok=True)
+        loc = pd / body.name
+        loc.write_bytes(b"\x89HDF mock placeholder")
+        (pd / (body.name + ".meta.json")).write_text(
+            '{"mock": true, "registered": true}', encoding="utf-8")
+        location = str(loc)
+    d = Dataset(id=new_id("ds"), project_id=p.id, name=body.name, dtype=DatasetType(body.dtype),
+                format=body.format, location=location, phase=body.phase,
+                metadata_=body.metadata)
+    db.add(d)
+    db.commit()
+    db.refresh(d)
+    return _dataset_out(d)
+
+
+# ================================================================ Environments
+
+@router.post("/projects/{project_id}/environments/discover", response_model=EnvironmentOut)
+def discover_environment(project_id: str, db: Session = Depends(get_db)):
+    p = _get_project(db, project_id)
+    manifest = discover_local(timeout=settings.discovery_timeout)
+    env = (
+        db.query(ComputeEnvironment)
+        .filter(ComputeEnvironment.project_id == project_id,
+                ComputeEnvironment.env_type == EnvType.local)
+        .first()
+    )
+    if env is None:
+        env = ComputeEnvironment(id=new_id("env"), project_id=p.id, name="本机环境",
+                                 env_type=EnvType.local)
+        db.add(env)
+    env.manifest = manifest.model_dump()
+    env.status = EnvStatus.healthy if manifest.runtimes else EnvStatus.unreachable
+    env.discovered_at = utcnow()
+    db.commit()
+    db.refresh(env)
+    return _env_out(env)
+
+
+@router.get("/projects/{project_id}/environments", response_model=list[EnvironmentOut])
+def list_environments(project_id: str, db: Session = Depends(get_db)):
+    _get_project(db, project_id)
+    envs = db.query(ComputeEnvironment).filter(
+        ComputeEnvironment.project_id == project_id).all()
+    return [_env_out(e) for e in envs]
+
+
+@router.post("/environments/{env_id}/rediscover", response_model=EnvironmentOut)
+def rediscover_environment(env_id: str, db: Session = Depends(get_db)):
+    env = db.get(ComputeEnvironment, env_id)
+    if env is None:
+        raise HTTPException(404, f"环境不存在: {env_id}")
+    manifest = discover_local(timeout=settings.discovery_timeout)
+    env.manifest = manifest.model_dump()
+    env.status = EnvStatus.healthy if manifest.runtimes else EnvStatus.unreachable
+    env.discovered_at = utcnow()
+    db.commit()
+    db.refresh(env)
+    return _env_out(env)
+
+
+# ---------------------------------------------------------------- 远程环境（Local Connector）
+
+@router.post("/projects/{project_id}/environments/register-remote", response_model=EnvironmentOut)
+def register_remote_environment(project_id: str, body: RegisterRemoteBody,
+                                db: Session = Depends(get_db)):
+    """注册远程 Connector：握手 /discover 获取远程 Manifest。
+    后端只保存 connector_url + 共享令牌，不持有任何 SSH 凭据。"""
+    p = _get_project(db, project_id)
+    from ..executor.remote import LocalConnectorExecutor
+    probe = LocalConnectorExecutor(Path("."), body.connector_url, body.token)
+    manifest_dict, err = probe.discover()
+    if err or manifest_dict is None:
+        raise HTTPException(400, f"无法连接 Connector ({body.connector_url}): {err}")
+    env = ComputeEnvironment(
+        id=new_id("env"), project_id=p.id, name=body.name, env_type=EnvType.remote,
+        manifest=manifest_dict,
+        status=EnvStatus.healthy if manifest_dict.get("runtimes") else EnvStatus.degraded,
+        connector_url=body.connector_url, connector_token=body.token,
+        discovered_at=utcnow())
+    db.add(env)
+    db.commit()
+    db.refresh(env)
+    return _env_out(env)
+
+
+@router.post("/environments/{env_id}/test")
+def test_environment(env_id: str, db: Session = Depends(get_db)):
+    env = db.get(ComputeEnvironment, env_id)
+    if env is None:
+        raise HTTPException(404, f"环境不存在: {env_id}")
+    if env.env_type == EnvType.remote and env.connector_url:
+        from ..executor.remote import LocalConnectorExecutor
+        ok, detail = LocalConnectorExecutor.test_connection(
+            env.connector_url, env.connector_token or "")
+        return {"ok": ok, "detail": detail, "env_type": "remote"}
+    return {"ok": True, "detail": "本地环境（直接执行）", "env_type": "local"}
+
+
+@router.post("/conversations/{conv_id}/set-environment", response_model=ConversationOut)
+def set_conversation_environment(conv_id: str, body: SetEnvironmentBody,
+                                 db: Session = Depends(get_db)):
+    c = _get_conversation(db, conv_id)
+    env = db.get(ComputeEnvironment, body.environment_id)
+    if env is None:
+        raise HTTPException(404, f"环境不存在: {body.environment_id}")
+    c.active_environment_id = env.id
+    c.active_runtime_id = None
+    db.commit()
+    db.refresh(c)
+    return _conversation_out(c)
+
+
+# ---------------------------------------------------------------- Agent（v0.2 LLM）
+
+@router.get("/agent/status")
+def agent_status():
+    from ..services import llm as llm_svc
+    return llm_svc.llm_status()
+
+
+@router.post("/agent/intent", response_model=IntentResponse)
+def agent_intent(body: IntentRequest, db: Session = Depends(get_db)):
+    """意图解析调试（dry-run）：LLM → 规则引擎 → none。"""
+    from ..services import llm as llm_svc
+    ctx = {}
+    if body.conversation_id:
+        conv = _get_conversation(db, body.conversation_id)
+        datasets = db.query(Dataset).filter(
+            Dataset.project_id == conv.project_id).order_by(
+            Dataset.created_at.desc()).all()
+        ctx = llm_svc.build_context(conv, datasets)
+
+    if llm_svc.enabled():
+        res = llm_svc.parse_intent_llm(body.content, ctx)
+        if res is not None:
+            if res.capability_id:
+                return IntentResponse(source=res.source, capability_id=res.capability_id,
+                                      parameters=res.parameters, note=res.note)
+            # LLM 判定无法识别 → 规则兜底
+            r = agent_svc.parse_intent(body.content)
+            if r:
+                return IntentResponse(source="rules", capability_id=r[0],
+                                      parameters=r[1], note=r[2])
+            return IntentResponse(source="none", note=res.note)
+
+    r = agent_svc.parse_intent(body.content)
+    if r:
+        return IntentResponse(source="rules", capability_id=r[0], parameters=r[1], note=r[2])
+    return IntentResponse(source="none", note="无法识别该请求")
+
+
+# ================================================================ Capabilities
+
+@router.get("/capabilities", response_model=list[CapabilityOut])
+def capabilities(domain: str | None = None):
+    return [CapabilityOut(**c) for c in list_capabilities(domain)]
+
+
+@router.get("/capabilities/resolve", response_model=ResolveOut)
+def resolve_capability(capability_id: str, environment_id: str | None = None,
+                       db: Session = Depends(get_db)):
+    cap = get_capability(capability_id)
+    if cap is None:
+        raise HTTPException(404, f"能力不存在: {capability_id}")
+    manifest: Manifest | None = None
+    if environment_id:
+        env = db.get(ComputeEnvironment, environment_id)
+        if env and env.manifest:
+            manifest = Manifest(**env.manifest)
+    results = []
+    for impl in cap["implementations"]:
+        tools = impl.get("tools", [])
+        runtime_id = None
+        reason = ""
+        available = False
+        if manifest is None:
+            reason = "未发现环境（先执行环境发现）"
+        else:
+            for t in manifest.tools:
+                if t.tool_id in tools and t.status == "healthy" and t.runtime_id:
+                    runtime_id = t.runtime_id
+                    available = True
+                    break
+            if not available:
+                missing = [t for t in tools if manifest.tool_status(t) != "healthy"]
+                reason = f"缺少工具: {', '.join(missing)}"
+        results.append({"id": impl["id"], "language": impl["language"],
+                        "available": available, "runtime_id": runtime_id, "reason": reason})
+    return ResolveOut(capability_id=capability_id, implementations=results)
+
+
+@router.get("/capabilities/{capability_id}", response_model=CapabilityOut)
+def capability_detail(capability_id: str):
+    c = get_capability(capability_id)
+    if c is None:
+        raise HTTPException(404, f"能力不存在: {capability_id}")
+    return CapabilityOut(**c)
+
+
+# ================================================================ Events
+
+@router.get("/events/{event_id}", response_model=EventOut)
+def event_detail(event_id: str, db: Session = Depends(get_db)):
+    return _event_out(_get_event(db, event_id), db)
+
+
+@router.get("/events/{event_id}/logs")
+def event_logs(event_id: str):
+    ev = None
+    db = SessionLocal()
+    try:
+        ev = _get_event(db, event_id)
+        if ev.log_path and Path(ev.log_path).exists():
+            return {"event_id": event_id, "logs": Path(ev.log_path).read_text(encoding="utf-8")}
+        return {"event_id": event_id, "logs": ""}
+    finally:
+        db.close()
+
+
+@router.post("/events/{event_id}/rerun", response_model=EventOut)
+def rerun_event(event_id: str, body: RerunBody, db: Session = Depends(get_db)):
+    original = _get_event(db, event_id)
+    conv = db.get(Conversation, original.conversation_id)
+    if conv is None:
+        raise HTTPException(400, "原事件没有关联对话，无法重跑")
+    try:
+        ev = agent_svc.rerun_event(db, conv, original, body.parameters)
+    except agent_svc.PlanError as e:
+        raise HTTPException(400, str(e))
+    return _event_out(ev, db)
+
+
+@router.get("/projects/{project_id}/dag", response_model=DagOut)
+def project_dag(project_id: str, db: Session = Depends(get_db)):
+    _get_project(db, project_id)
+    return dag_svc.build_dag(db, project_id)
+
+
+# ================================================================ Artifacts
+
+@router.get("/projects/{project_id}/artifacts", response_model=list[ArtifactOut])
+def project_artifacts(project_id: str, db: Session = Depends(get_db)):
+    _get_project(db, project_id)
+    arts = db.query(Artifact).filter(Artifact.project_id == project_id).order_by(
+        Artifact.created_at.desc()).all()
+    return [_artifact_out(a) for a in arts]
+
+
+@router.get("/artifacts/{artifact_id}/content")
+def artifact_content(artifact_id: str):
+    db = SessionLocal()
+    try:
+        art = db.get(Artifact, artifact_id)
+        if art is None:
+            raise HTTPException(404, f"产物不存在: {artifact_id}")
+        p = Path(art.path)
+        if not p.exists():
+            raise HTTPException(404, f"产物文件不存在: {art.path}")
+        return FileResponse(p, media_type=art.mime, filename=art.name)
+    finally:
+        db.close()

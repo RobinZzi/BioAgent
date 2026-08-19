@@ -1,0 +1,26 @@
+# ---- Python ----
+backend/.venv/
+backend/.venv311/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# ---- Node ----
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+
+# ---- 运行时数据（seed 脚本可重新生成）----
+backend/data/
+connector/work/
+
+# ---- 包管理缓存（uv/npm 沙箱重定向）----
+.uv-cache/
+.uv-python/
+.npm-cache/
+
+# ---- 系统/编辑器 ----
+.DS_Store
+*.swp
+.idea/
+.vscode/
