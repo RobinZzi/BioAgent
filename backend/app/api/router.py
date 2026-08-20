@@ -371,13 +371,14 @@ def agent_status():
 
 @router.get("/settings")
 def get_settings():
-    """运行时工作模式 / Agent 模式配置。"""
+    """运行时工作模式 / Agent 模式配置（不返回 api_key 明文）。"""
     from ..services import llm as llm_svc
     return {
         "executor_mode": settings.executor_mode,
         "llm_mode": settings.llm_mode,
         "llm_configured": bool(settings.llm_api_key),
         "llm_model": settings.llm_model,
+        "llm_base_url": settings.llm_base_url,
         "version": settings.version,
         "agent_status": llm_svc.llm_status(),
     }
@@ -386,20 +387,38 @@ def get_settings():
 class SettingsPatch(BaseModel):
     executor_mode: str | None = None   # mock | auto | local
     llm_mode: str | None = None        # off | echo | real
+    llm_api_key: str | None = None     # None=不改动，空串=清除，否则保存
+    llm_base_url: str | None = None
+    llm_model: str | None = None
 
 
 @router.patch("/settings")
 def patch_settings(body: SettingsPatch):
-    """运行时切换工作模式 / Agent 模式（进程内生效，重启后按环境变量）。"""
+    """运行时切换工作模式 / Agent 模式 / LLM 配置。"""
     if body.executor_mode is not None:
         if body.executor_mode not in ("mock", "auto", "local"):
             raise HTTPException(400, "executor_mode 必须是 mock/auto/local")
         settings.executor_mode = body.executor_mode
+
+    # LLM 配置持久化（写入本地文件，重启后仍生效）
+    if body.llm_api_key is not None or body.llm_base_url or body.llm_model:
+        settings.save_llm_config(
+            api_key=body.llm_api_key,
+            base_url=body.llm_base_url or None,
+            model=body.llm_model or None,
+        )
+        if body.llm_api_key is not None:
+            settings.llm_api_key = body.llm_api_key
+        if body.llm_base_url:
+            settings.llm_base_url = body.llm_base_url
+        if body.llm_model:
+            settings.llm_model = body.llm_model
+
     if body.llm_mode is not None:
         if body.llm_mode not in ("off", "echo", "real"):
             raise HTTPException(400, "llm_mode 必须是 off/echo/real")
         if body.llm_mode == "real" and not settings.llm_api_key:
-            raise HTTPException(400, "real 模式需要配置 BIOAGENT_LLM_API_KEY")
+            raise HTTPException(400, "real 模式需要先配置 API Key")
         settings.llm_mode = body.llm_mode
     return get_settings()
 

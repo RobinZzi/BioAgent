@@ -61,7 +61,7 @@ export const api = {
 
   // settings
   settings: () => req<Settings>('/settings'),
-  patchSettings: (body: { executor_mode?: string; llm_mode?: string }) =>
+  patchSettings: (body: { executor_mode?: string; llm_mode?: string; llm_api_key?: string; llm_base_url?: string; llm_model?: string }) =>
     req<Settings>('/settings', { method: 'PATCH', body: JSON.stringify(body) }),
 
   // capabilities

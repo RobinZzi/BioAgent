@@ -31,6 +31,10 @@ export default function SettingsPanel({
   const [showRemoteForm, setShowRemoteForm] = useState(false)
   const [remote, setRemote] = useState({ name: '', connector_url: '', token: '' })
   const [testing, setTesting] = useState<string | null>(null)
+  const [apiKey, setApiKey] = useState('')
+  const [baseUrl, setBaseUrl] = useState(settings?.llm_base_url ?? '')
+  const [model, setModel] = useState(settings?.llm_model ?? '')
+  const [savingKey, setSavingKey] = useState(false)
 
   useEffect(() => {
     api.capabilities().then(setCaps).catch(console.error)
@@ -41,6 +45,27 @@ export default function SettingsPanel({
       await api.patchSettings(body)
       onRefreshSettings()
     } catch (e) { alert((e as Error).message) }
+  }
+
+  const saveApiKey = async () => {
+    setSavingKey(true)
+    try {
+      await api.patchSettings({
+        llm_api_key: apiKey,
+        llm_base_url: baseUrl || undefined,
+        llm_model: model || undefined,
+      })
+      setApiKey('')
+      onRefreshSettings()
+    } catch (e) { alert((e as Error).message) } finally { setSavingKey(false) }
+  }
+
+  const clearApiKey = async () => {
+    setSavingKey(true)
+    try {
+      await api.patchSettings({ llm_api_key: '' })
+      onRefreshSettings()
+    } catch (e) { alert((e as Error).message) } finally { setSavingKey(false) }
   }
 
   const discover = async () => {
@@ -120,7 +145,34 @@ export default function SettingsPanel({
             <div className="muted" style={{ marginTop: 6 }}>
               当前：{settings?.llm_mode ?? '—'}
               {settings?.llm_mode === 'real' && settings?.llm_configured === false &&
-                ' · 未配置 API Key，real 模式需设置 BIOAGENT_LLM_API_KEY'}
+                ' · 未配置 API Key，real 模式需先设置 API Key'}
+            </div>
+          </div>
+
+          <div className="settings-section">
+            <h4>LLM API Key</h4>
+            <div className="muted" style={{ marginBottom: 8 }}>
+              配置 OpenAI 兼容 API（默认 DeepSeek）。Key 仅保存在本机后端数据目录，不会返回前端明文。
+              状态：{settings?.llm_configured ? '已配置' : '未配置'}
+            </div>
+            <div className="create-form">
+              <input type="password" placeholder="API Key（sk-...）" value={apiKey}
+                     onChange={(e) => setApiKey(e.target.value)}
+                     style={{ minWidth: 220 }} />
+              <input placeholder="Base URL" value={baseUrl}
+                     onChange={(e) => setBaseUrl(e.target.value)}
+                     style={{ minWidth: 200 }} />
+              <input placeholder="模型" value={model}
+                     onChange={(e) => setModel(e.target.value)} />
+              <button className="primary" onClick={saveApiKey} disabled={savingKey || !apiKey.trim()}>
+                保存
+              </button>
+              {settings?.llm_configured && (
+                <button onClick={clearApiKey} disabled={savingKey}>清除</button>
+              )}
+            </div>
+            <div className="muted" style={{ marginTop: 6 }}>
+              当前：{settings?.llm_model ?? '—'} · {settings?.llm_base_url ?? '—'}
             </div>
           </div>
 

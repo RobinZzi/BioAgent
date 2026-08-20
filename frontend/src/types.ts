@@ -69,6 +69,7 @@ export interface Settings {
   llm_mode: 'off' | 'echo' | 'real'
   llm_configured: boolean
   llm_model: string
+  llm_base_url?: string
   version: string
   agent_status: AgentStatus
 }
