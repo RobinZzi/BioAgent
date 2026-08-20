@@ -451,6 +451,37 @@ class MockExecutor(BaseExecutor):
             _write_fig(outdir / "gsea_plot.png", "GSEA", draw)
             add_file("figure", "gsea_plot.png")
 
+        elif cap_id == "bulk_rna.fastqc":
+            reads = rng.randint(20_000_000, 60_000_000)
+            q30 = round(rng.uniform(88, 96), 1)
+            gc = round(rng.uniform(40, 52), 1)
+            metrics = {"reads": reads, "q30_pct": q30, "gc_pct": gc}
+            _write_html(outdir / "fastqc_report.html", "FastQC 质控报告",
+                        [("基本指标", _html_table(["指标", "数值"], [
+                            ["reads", f"{reads:,}"], ["Q30 占比", f"{q30}%"],
+                            ["GC 含量", f"{gc}%"], ["碱基质量", ">30（良好）"]])),
+                         ("结论", "质量良好，可进入去接头/裁切步骤。")])
+            add_file("report", "fastqc_report.html")
+            log.append(f"[mock] fastqc: {reads:,} reads, Q30={q30}%")
+
+        elif cap_id == "bulk_rna.trimming":
+            before = rng.randint(20_000_000, 60_000_000)
+            after = int(before * rng.uniform(0.9, 0.97))
+            metrics = {"reads_before": before, "reads_after": after,
+                       "adapters": params.get("adapters", "auto"),
+                       "min_length": params.get("min_length")}
+            add_file("other", f"{input_stem}_trimmed.fastq.gz")
+            _write_html(outdir / "trimming_report.html", "去接头裁切报告",
+                        [("裁切结果", _html_table(["指标", "数值"], [
+                            ["裁切前 reads", f"{before:,}"], ["裁切后 reads", f"{after:,}"],
+                            ["保留比例", f"{after/before*100:.1f}%"],
+                            ["接头模式", params.get("adapters", "auto")]])),
+                         ("说明", "cutadapt 模板化裁切，min_length=" + str(params.get("min_length", 20)) + "。")])
+            add_file("report", "trimming_report.html")
+            add_dataset(f"{input_stem}_trimmed.fastq.gz", "fastq", "fastq.gz", "trimmed",
+                        {"reads_after": after, "min_length": params.get("min_length")})
+            log.append(f"[mock] trimming: {before:,} -> {after:,} reads")
+
         elif cap_id == "bulk_rna.alignment":
             threads = params.get("threads", 4)
             reads = rng.randint(20_000_000, 60_000_000)
@@ -466,8 +497,32 @@ class MockExecutor(BaseExecutor):
                             ["mapping rate", f"{metrics['unique_mapping_rate']*100:.1f}%"]])),
                          ("说明", f"STAR 模板化比对，threads={threads}。")])
             add_file("report", "alignment_report.html")
-            add_dataset(f"{input_stem}_aligned.bam", "bulk_rna", "bam", "aligned",
+            add_dataset(f"{input_stem}_aligned.bam", "fastq", "bam", "aligned",
                         {"mapping_rate": metrics["unique_mapping_rate"]})
+
+        elif cap_id == "bulk_rna.quantification":
+            n_genes = rng.randint(15000, 25000)
+            n_samples = rng.randint(3, 10)
+            rows = []
+            for i in range(n_genes):
+                row = [f"GENE{i}"] + [str(rng.randint(0, 3000)) for _ in range(n_samples)]
+                rows.append(row)
+            with open(outdir / "counts.csv", "w", newline="") as f:
+                w = csv.writer(f)
+                w.writerow(["gene"] + [f"S{j+1}" for j in range(n_samples)])
+                w.writerows(rows)
+            add_file("csv", "counts.csv")
+            metrics = {"genes": n_genes, "samples": n_samples,
+                       "feature_type": params.get("feature_type")}
+            _write_html(outdir / "quantification_report.html", "基因定量报告",
+                        [("定量结果", _html_table(["指标", "数值"], [
+                            ["基因数", n_genes], ["样本数", n_samples],
+                            ["特征类型", params.get("feature_type", "exon")]])),
+                         ("说明", "featureCounts 输出 count matrix，可作为差异表达分析的输入。")])
+            add_file("report", "quantification_report.html")
+            add_dataset(f"{input_stem}_counts.csv", "bulk_rna", "csv", "raw",
+                        {"genes": n_genes, "samples": n_samples, "from": "featurecounts"})
+            log.append(f"[mock] quantified {n_genes} genes x {n_samples} samples")
 
         else:
             log.append(f"[mock] capability {cap_id} 无 mock 实现，返回空结果")

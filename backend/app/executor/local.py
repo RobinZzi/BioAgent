@@ -84,7 +84,7 @@ class LocalExecutor(BaseExecutor):
             return self._run_scanpy(task, capability)
         if impl in ("DESeq2", "edgeR"):
             return self._run_r(task, capability)
-        if impl == "star":
+        if impl in ("star", "fastqc", "cutadapt", "featureCounts"):
             return self._run_bash(task, capability)
         return ExecutionResult(ok=False, error={
             "stage": "resolve", "type": "UnsupportedImplementation",
@@ -164,8 +164,9 @@ class LocalExecutor(BaseExecutor):
     def _run_bash(self, task: TaskSpec, capability: dict) -> ExecutionResult:
         outdir = Path(task.output_dir)
         outdir.mkdir(parents=True, exist_ok=True)
-        script = templates.render_star_bash(task.parameters, task.input_dataset_path or "", str(outdir))
-        script_path = outdir / "run_star.sh"
+        script = templates.render_bash_script(task.implementation, task.parameters,
+                                              task.input_dataset_path or "", str(outdir))
+        script_path = outdir / "run.sh"
         script_path.write_text(script, encoding="utf-8")
         try:
             r = subprocess.run(["bash", str(script_path)], capture_output=True,

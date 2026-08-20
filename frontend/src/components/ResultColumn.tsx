@@ -45,7 +45,9 @@ export default function ResultColumn({
           />
         )}
         {tab === 'artifacts' && <ArtifactGallery projectId={projectId} />}
-        {tab === 'datasets' && <DatasetChain datasets={detail.datasets} />}
+        {tab === 'datasets' && (
+          <DatasetChain datasets={detail.datasets} projectId={projectId} onRefresh={onRefresh} />
+        )}
 
         {tab === 'dag' && selectedEventId && (
           <EventDetail eventId={selectedEventId} onClose={() => setSelectedEventId(null)} />

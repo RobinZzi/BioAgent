@@ -41,6 +41,8 @@ CLI_TOOLS = {
     "salmon": ("salmon", "bash"),
     "kallisto": ("kallisto", "bash"),
     "fastqc": ("fastqc", "bash"),
+    "cutadapt": ("cutadapt", "bash"),
+    "featureCounts": ("featureCounts", "bash"),
 }
 
 _SCHEDULERS = {"sbatch": "slurm", "qsub": "pbs"}

@@ -126,3 +126,48 @@ STAR --genomeDir {json.dumps(genome)} \\
      --outFileNamePrefix {json.dumps(output_dir)}/star_
 samtools index {json.dumps(output_dir)}/star_Aligned.sortedByCoord.out.bam
 """
+
+
+def render_bash_script(impl: str, params: dict, input_path: str, output_dir: str) -> str:
+    """按实现 id 生成受控 bash 脚本（参数一律 shlex 转义，禁止拼自由文本）。"""
+    import shlex
+
+    def q(s: str) -> str:
+        return shlex.quote(s)
+
+    if impl == "fastqc":
+        return f"""#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p {q(output_dir)}
+fastqc -o {q(output_dir)} {q(input_path)}
+"""
+
+    if impl == "cutadapt":
+        adapters = params.get("adapters", "auto")
+        min_len = int(params.get("min_length", 20))
+        if adapters and adapters != "auto":
+            adapter_arg = f"-a {q(str(adapters))}"
+        else:
+            adapter_arg = "-a AGATCGGAAGAGC"   # 默认 Illumina 接头（auto 场景的保守默认）
+        out = f"{output_dir}/trimmed.fastq.gz"
+        return f"""#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p {q(output_dir)}
+cutadapt {adapter_arg} -m {min_len} -o {q(out)} {q(input_path)}
+"""
+
+    if impl == "featureCounts":
+        gtf = params.get("gtf", "")
+        ftype = params.get("feature_type", "exon")
+        out = f"{output_dir}/counts.txt"
+        return f"""#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p {q(output_dir)}
+featureCounts -a {q(str(gtf))} -t {ftype} -o {q(out)} {q(input_path)}
+"""
+
+    # 兼容旧 star 模板
+    if impl == "star":
+        return render_star_bash(params, input_path, output_dir)
+
+    raise ValueError(f"无 bash 模板: {impl}")

@@ -19,6 +19,9 @@ from . import llm as llm_svc
 # ---------------------------------------------------------------- 意图规则
 # (关键词列表, capability_id, 参数缺省, 说明)。顺序即优先级（先匹配先得）。
 INTENT_RULES: list[tuple[list[str], str, dict, str]] = [
+    (["fastqc", "下机质量", "碱基质量"], "bulk_rna.fastqc", {}, "FastQC 质控"),
+    (["trim", "裁切", "去接头", "cutadapt", "接头"], "bulk_rna.trimming", {}, "去接头裁切"),
+    (["定量", "quantification", "featurecounts", "count matrix"], "bulk_rna.quantification", {}, "基因定量"),
     (["注释", "annotation", "annotate", "细胞类型"], "scrna.annotation", {}, "细胞注释"),
     (["标记基因", "marker gene", "marker"], "scrna.marker_genes", {}, "标记基因分析"),
     (["聚类", "cluster", "clustering", "leiden", "louvain"], "scrna.clustering", {}, "Leiden 聚类"),

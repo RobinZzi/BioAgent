@@ -15,7 +15,7 @@ SCRNA_PHASE_RANK = {
     "umap": 5, "clustered": 6, "annotated": 7, "marker_genes": 7,
 }
 BULK_PHASE_RANK = {
-    "raw": 0, "qc": 1, "normalized": 2, "de": 3,
+    "raw": 0, "trimmed": 1, "aligned": 2, "qc": 1, "normalized": 2, "de": 3,
 }
 
 # 前置依赖（capability → 所需前置 capability 列表）
@@ -31,7 +31,12 @@ PREREQ = {
     "scrna.clustering": ["scrna.neighbors"],
     "scrna.marker_genes": ["scrna.clustering"],
     "scrna.annotation": ["scrna.clustering"],
-    # Bulk RNA
+    # Bulk RNA（fastq 下机流水线）
+    "bulk_rna.fastqc": [],
+    "bulk_rna.trimming": ["bulk_rna.fastqc"],
+    "bulk_rna.alignment": ["bulk_rna.trimming"],
+    "bulk_rna.quantification": ["bulk_rna.alignment"],
+    # Bulk RNA（count matrix 分析链）
     "bulk_rna.inspect": [],
     "bulk_rna.qc": [],
     "bulk_rna.normalization": ["bulk_rna.qc"],
@@ -40,8 +45,6 @@ PREREQ = {
     "bulk_rna.heatmap": ["bulk_rna.differential_expression"],
     "bulk_rna.go_enrichment": ["bulk_rna.differential_expression"],
     "bulk_rna.gsea": ["bulk_rna.differential_expression"],
-    # bash/CLI
-    "bulk_rna.alignment": [],
 }
 
 
@@ -100,6 +103,9 @@ SEURAT = _impl("seurat", "r", "renv", ["Seurat"])
 DESEQ2 = _impl("DESeq2", "r", "r", ["DESeq2"], default=True)
 EDGER = _impl("edgeR", "r", "r", ["edgeR"])
 STAR_BASH = _impl("star", "bash", "shell", ["star", "samtools"], default=True)
+FASTQC_BASH = _impl("fastqc", "bash", "shell", ["fastqc"], default=True)
+CUTADAPT_BASH = _impl("cutadapt", "bash", "shell", ["cutadapt"], default=True)
+FEATURECOUNTS_BASH = _impl("featureCounts", "bash", "shell", ["featureCounts"], default=True)
 PY_BULK = _impl("python-bulk", "python", "conda", ["pandas", "matplotlib"], default=True)
 R_CLUSTERPROFILER = _impl("clusterProfiler", "r", "r", ["clusterProfiler"], default=True)
 
@@ -257,15 +263,41 @@ CAPABILITIES: list[dict] = [
         "基因集富集分析（GSEA）。",
         keywords=["gsea"],
     ),
-    # ================================================================ bash/CLI
+    # ================================================================ fastq 下机流水线
     _cap(
-        "bulk_rna.alignment", "序列比对", "bulk_rna", "fastq", "raw", "raw", True,
+        "bulk_rna.fastqc", "FastQC 质控", "bulk_rna", "fastq", "raw", "raw", False,
+        [FASTQC_BASH],
+        {},
+        {"reports": ["fastqc_report.html"]},
+        "下机 fastq 质量检查（FastQC：碱基质量、GC 含量、接头等）。",
+        keywords=["fastqc", "下机质量", "碱基质量"],
+    ),
+    _cap(
+        "bulk_rna.trimming", "去接头裁切", "bulk_rna", "fastq", "raw", "trimmed", True,
+        [CUTADAPT_BASH],
+        {"adapters": _p("string", "auto", description="接头序列（auto=自动识别，或具体序列）"),
+         "min_length": _p("integer", 20, minimum=10, maximum=100, description="最短保留长度")},
+        {"reports": ["trimming_report.html"]},
+        "cutadapt 去接头与低质量裁切（模板化 bash 命令）。",
+        keywords=["trimming", "trim", "裁切", "去接头", "cutadapt"],
+    ),
+    _cap(
+        "bulk_rna.alignment", "序列比对", "bulk_rna", "fastq", "trimmed", "aligned", True,
         [STAR_BASH],
         {"genome_dir": _p("string", "", description="STAR 基因组索引目录"),
          "threads": _p("integer", 4, minimum=1, maximum=64, description="线程数")},
         {"reports": ["alignment_report.html"]},
         "STAR 序列比对 + samtools 排序（模板化 bash 命令，白名单参数）。",
         keywords=["比对", "alignment", "star", "bam"],
+    ),
+    _cap(
+        "bulk_rna.quantification", "基因定量", "bulk_rna", "fastq", "aligned", "raw", True,
+        [FEATURECOUNTS_BASH],
+        {"gtf": _p("string", "", description="GTF 注释文件路径"),
+         "feature_type": _p("string", "exon", enum=["exon", "gene", "transcript"], description="定量特征")},
+        {"tables": ["counts.csv"], "reports": ["quantification_report.html"]},
+        "featureCounts 基因计数（输出 count matrix，接入后续差异表达分析）。",
+        keywords=["定量", "quantification", "featurecounts", "counts", "count matrix"],
     ),
 ]
 
