@@ -20,6 +20,7 @@ from . import llm as llm_svc
 # (关键词列表, capability_id, 参数缺省, 说明)。顺序即优先级（先匹配先得）。
 INTENT_RULES: list[tuple[list[str], str, dict, str]] = [
     (["fastqc", "下机质量", "碱基质量"], "bulk_rna.fastqc", {}, "FastQC 质控"),
+    (["cellranger", "10x", "单细胞下机", "下机单细胞"], "scrna.import_10x", {}, "10x 下机导入"),
     (["trim", "裁切", "去接头", "cutadapt", "接头"], "bulk_rna.trimming", {}, "去接头裁切"),
     (["定量", "quantification", "featurecounts", "count matrix"], "bulk_rna.quantification", {}, "基因定量"),
     (["注释", "annotation", "annotate", "细胞类型"], "scrna.annotation", {}, "细胞注释"),
@@ -186,7 +187,19 @@ def plan_capability(db: Session, conversation: Conversation, capability_id: str,
         if first:
             ds = find_dataset(db, conversation.project_id, c["dataset_dtype"], c["requires_phase"])
             if ds is None:
-                raise PlanError(f"缺少 {c['requires_phase']} 阶段的数据集，无法开始 {c['name']}。")
+                # dtype 桥接：需要 scrna 数据集但只有 fastq → 自动补 10x 导入
+                if c["dataset_dtype"] == "scrna":
+                    fastq_ds = find_dataset(db, conversation.project_id, "fastq", "raw")
+                    if fastq_ds is not None:
+                        imp = get_capability("scrna.import_10x")
+                        imp_params, _ = validate_parameters(imp, {})
+                        steps.append({"capability_id": "scrna.import_10x",
+                                      "params": imp_params, "dataset_id": fastq_ds.id})
+                        steps.append({"capability_id": cid, "params": step_params,
+                                      "dataset_id": None})  # 输入 = import 输出
+                        first = False
+                        continue
+                raise PlanError(f"缺少 {c['requires_phase']} 阶段的 {c['dataset_dtype']} 数据集，无法开始 {c['name']}。")
             ds_id = ds.id
         steps.append({"capability_id": cid, "params": step_params, "dataset_id": ds_id})
         first = False

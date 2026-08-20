@@ -106,11 +106,22 @@ STAR_BASH = _impl("star", "bash", "shell", ["star", "samtools"], default=True)
 FASTQC_BASH = _impl("fastqc", "bash", "shell", ["fastqc"], default=True)
 CUTADAPT_BASH = _impl("cutadapt", "bash", "shell", ["cutadapt"], default=True)
 FEATURECOUNTS_BASH = _impl("featureCounts", "bash", "shell", ["featureCounts"], default=True)
+CELLRANGER_BASH = _impl("cellranger", "bash", "shell", ["cellranger"], default=True)
 PY_BULK = _impl("python-bulk", "python", "conda", ["pandas", "matplotlib"], default=True)
 R_CLUSTERPROFILER = _impl("clusterProfiler", "r", "r", ["clusterProfiler"], default=True)
 
 CAPABILITIES: list[dict] = [
     # ================================================================ scRNA
+    _cap(
+        "scrna.import_10x", "10x 下机导入", "scrna", "fastq", "raw", "raw", True,
+        [CELLRANGER_BASH],
+        {"sample_id": _p("string", "sample1", description="样本 ID（cellranger --sample）"),
+         "reference": _p("string", "", description="cellranger 参考基因组路径"),
+         "expect_cells": _p("integer", 5000, minimum=100, maximum=100000, description="预期细胞数")},
+        {"reports": ["cellranger_report.html"]},
+        "Cell Ranger count：10x 下机 fastq → count matrix / h5ad，接入单细胞分析链。",
+        keywords=["cellranger", "10x", "单细胞下机", "下机单细胞", "cell count"],
+    ),
     _cap(
         "scrna.inspect", "数据检查", "scrna", "scrna", "raw", "raw", False,
         [SCANPY],

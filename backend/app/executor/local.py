@@ -84,7 +84,7 @@ class LocalExecutor(BaseExecutor):
             return self._run_scanpy(task, capability)
         if impl in ("DESeq2", "edgeR"):
             return self._run_r(task, capability)
-        if impl in ("star", "fastqc", "cutadapt", "featureCounts"):
+        if impl in ("star", "fastqc", "cutadapt", "featureCounts", "cellranger"):
             return self._run_bash(task, capability)
         return ExecutionResult(ok=False, error={
             "stage": "resolve", "type": "UnsupportedImplementation",

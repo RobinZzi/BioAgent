@@ -127,7 +127,7 @@ class SSHExecutor(BaseExecutor):
         if impl == "star":
             text = templates.render_star_bash(task.parameters, inp, remote_out)
             return "run_star.sh", text, lambda rin: f"{_DEFAULT_BASH} {remote_base}/run_star.sh"
-        if impl in ("fastqc", "cutadapt", "featureCounts"):
+        if impl in ("fastqc", "cutadapt", "featureCounts", "cellranger"):
             text = templates.render_bash_script(impl, task.parameters, inp, remote_out)
             return f"run_{impl}.sh", text, lambda rin: f"{_DEFAULT_BASH} {remote_base}/run_{impl}.sh"
         raise ValueError(f"SSH 执行器暂不支持 implementation={impl}")

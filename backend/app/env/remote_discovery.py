@@ -16,7 +16,7 @@ PY_TOOL_MODULES = {
 }
 
 # 系统级 CLI 工具（command -v 探测）
-CLI_TOOLS = ["star", "samtools", "salmon", "kallisto", "fastqc", "cutadapt", "featureCounts", "sbatch"]
+CLI_TOOLS = ["star", "samtools", "salmon", "kallisto", "fastqc", "cutadapt", "featureCounts", "cellranger", "sbatch"]
 
 
 def _run(client, cmd: str, timeout: int = 60) -> tuple[bool, str]:

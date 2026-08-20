@@ -156,6 +156,22 @@ mkdir -p {q(output_dir)}
 cutadapt {adapter_arg} -m {min_len} -o {q(out)} {q(input_path)}
 """
 
+    if impl == "cellranger":
+        sample = params.get("sample_id", "sample1")
+        ref = params.get("reference", "")
+        cells = int(params.get("expect_cells", 5000))
+        return f"""#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p {q(output_dir)}
+cellranger count --id={q(str(sample))} \\
+     --fastqs={q(str(input_path))} \\
+     --sample={q(str(sample))} \\
+     --transcriptome={q(str(ref))} \\
+     --expect-cells={cells} \\
+     --localcores=8 --localmem=16
+cp -r {q(str(sample))}/outs/* {q(output_dir)}/ 2>/dev/null || true
+"""
+
     if impl == "featureCounts":
         gtf = params.get("gtf", "")
         ftype = params.get("feature_type", "exon")

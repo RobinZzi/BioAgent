@@ -101,7 +101,25 @@ class MockExecutor(BaseExecutor):
         metrics: dict = {}
 
         # ------------------------------------------------------------ scRNA
-        if cap_id == "scrna.inspect":
+        if cap_id == "scrna.import_10x":
+            cells = params.get("expect_cells", 5000)
+            genes = rng.randint(15000, 25000)
+            mean_reads = rng.randint(20000, 50000)
+            metrics = {"cells": cells, "genes": genes, "sample_id": params.get("sample_id"),
+                       "mean_reads_per_cell": mean_reads}
+            add_dataset(f"{input_stem}_{params.get('sample_id','sample')}_filtered.h5ad",
+                        "scrna", "h5ad", "raw",
+                        {"cells": cells, "genes": genes, "source": "cellranger count"})
+            _write_html(outdir / "cellranger_report.html", "Cell Ranger 导入报告",
+                        [("导入结果", _html_table(["指标", "数值"], [
+                            ["样本", params.get("sample_id", "sample1")],
+                            ["过滤后细胞数", f"{cells:,}"], ["基因数", f"{genes:,}"],
+                            ["平均每细胞 reads", f"{mean_reads:,}"]])),
+                         ("说明", "Cell Ranger count 输出已转为 h5ad，可进入单细胞分析链。")])
+            add_file("report", "cellranger_report.html")
+            log.append(f"[mock] cellranger: {cells:,} cells x {genes:,} genes")
+
+        elif cap_id == "scrna.inspect":
             n_cells = rng.randint(8000, 15000)
             n_genes = rng.randint(12000, 22000)
             n_samples = rng.randint(2, 6)

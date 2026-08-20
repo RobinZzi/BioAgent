@@ -43,6 +43,7 @@ CLI_TOOLS = {
     "fastqc": ("fastqc", "bash"),
     "cutadapt": ("cutadapt", "bash"),
     "featureCounts": ("featureCounts", "bash"),
+    "cellranger": ("cellranger", "bash"),
 }
 
 _SCHEDULERS = {"sbatch": "slurm", "qsub": "pbs"}
