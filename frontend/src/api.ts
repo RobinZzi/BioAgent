@@ -2,7 +2,7 @@
 import type {
   AgentStatus, AnalysisEvent, Artifact, Capability, Conversation, ConversationDetail,
   Dag, Dataset, Environment, MessageResult, Project, ProjectDetail,
-  ResolveResult,
+  ResolveResult, Settings,
 } from './types'
 
 const BASE = '/api'
@@ -58,6 +58,11 @@ export const api = {
 
   // agent
   agentStatus: () => req<AgentStatus>('/agent/status'),
+
+  // settings
+  settings: () => req<Settings>('/settings'),
+  patchSettings: (body: { executor_mode?: string; llm_mode?: string }) =>
+    req<Settings>('/settings', { method: 'PATCH', body: JSON.stringify(body) }),
 
   // capabilities
   capabilities: () => req<Capability[]>('/capabilities'),

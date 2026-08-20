@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { api } from '../api'
 import type { Dag, DagNode } from '../types'
-import EventDetail from './EventDetail'
 
 const CAP_LABEL: Record<string, string> = {
   'scrna.inspect': '数据检查', 'scrna.qc': '细胞 QC', 'scrna.normalization': '标准化',
@@ -14,12 +13,18 @@ const CAP_LABEL: Record<string, string> = {
   'bulk_rna.alignment': '序列比对',
 }
 
-export default function AnalysisDAG({ dag, onRefresh }: { dag: Dag; onRefresh: () => void }) {
-  const [selected, setSelected] = useState<DagNode | null>(null)
+export default function AnalysisDAG({
+  dag, selectedEventId, onSelect, onRefresh,
+}: {
+  dag: Dag
+  selectedEventId: string | null
+  onSelect: (id: string) => void
+  onRefresh: () => void
+}) {
   const [rerunning, setRerunning] = useState<string | null>(null)
 
   if (!dag || dag.nodes.length === 0) {
-    return <div className="empty">还没有分析事件。在左侧对话中发出第一个分析请求，例如「聚类，分辨率 0.5」。</div>
+    return <div className="empty">还没有分析事件。在对话中发出第一个分析请求，例如「聚类，分辨率 0.5」。</div>
   }
 
   const maxDepth = Math.max(0, ...dag.nodes.map((n) => dag.depth[n.id] ?? 0))
@@ -27,7 +32,7 @@ export default function AnalysisDAG({ dag, onRefresh }: { dag: Dag; onRefresh: (
   for (const n of dag.nodes) layers[dag.depth[n.id] ?? 0].push(n)
 
   const rerun = async (node: DagNode) => {
-    if (!confirm(`重跑事件 ${node.capability_id}（参数可传，默认为原参数）？\n新事件将以 re_run 边挂到 DAG。`)) return
+    if (!confirm(`重跑事件 ${node.capability_id}（参数默认为原参数）？新事件将以 re_run 边挂到 DAG。`)) return
     setRerunning(node.id)
     try {
       await api.rerunEvent(node.id, {})
@@ -55,8 +60,9 @@ export default function AnalysisDAG({ dag, onRefresh }: { dag: Dag; onRefresh: (
           <div key={depth} className="dag-layer">
             <div className="dag-layer-label">步骤 {depth}</div>
             {layer.map((n) => (
-              <div key={n.id} className={`dag-node ${statusClass(n.status)}`}
-                   onClick={() => setSelected(n)} title={n.id}>
+              <div key={n.id}
+                   className={`dag-node ${statusClass(n.status)} ${n.id === selectedEventId ? 'selected' : ''}`}
+                   onClick={() => onSelect(n.id)} title={n.id}>
                 <div className="cap">{CAP_LABEL[n.capability_id] ?? n.capability_id}</div>
                 <div className="meta">
                   <span className="mono">{n.id.slice(0, 14)}</span> · impl: {n.implementation}
@@ -78,16 +84,9 @@ export default function AnalysisDAG({ dag, onRefresh }: { dag: Dag; onRefresh: (
         ))}
       </div>
 
-      <div className="muted" style={{ marginTop: 8 }}>
-        图例：<span className="badge green">succeeded</span>{' '}
-        <span className="badge red">failed</span>{' '}
-        <span className="badge amber">running/queued</span> — 依赖边由数据集版本链推导，
-        重跑以 <span className="mono">re_run</span> 边标记（fork）。
+      <div className="muted" style={{ marginTop: 8, padding: '0 14px' }}>
+        依赖边由数据集版本链推导，重跑以 <span className="mono">re_run</span> 边标记（fork）。点击节点查看详情。
       </div>
-
-      {selected && (
-        <EventDetail eventId={selected.id} onClose={() => setSelected(null)} onRefresh={onRefresh} />
-      )}
     </div>
   )
 }

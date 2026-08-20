@@ -64,6 +64,15 @@ export interface AgentStatus {
   description: string
 }
 
+export interface Settings {
+  executor_mode: 'mock' | 'auto' | 'local'
+  llm_mode: 'off' | 'echo' | 'real'
+  llm_configured: boolean
+  llm_model: string
+  version: string
+  agent_status: AgentStatus
+}
+
 export interface Artifact {
   id: string
   event_id: string

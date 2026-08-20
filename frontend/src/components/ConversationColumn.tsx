@@ -12,7 +12,7 @@ const QUICK = [
   ['继续', '继续'],
 ]
 
-export default function ConversationPanel({
+export default function ConversationColumn({
   convId, messages, busy, onSendStart, onRefresh,
 }: {
   convId?: string
@@ -36,16 +36,17 @@ export default function ConversationPanel({
   }
 
   return (
-    <div className="conv-panel">
-      <div className="conv-header">
-        <span>💬</span>
-        <span style={{ fontWeight: 600 }}>{convId ? '分析对话' : '对话'}</span>
-        <span className="muted mono" style={{ marginLeft: 'auto' }}>{convId ?? '未创建'}</span>
+    <div className="col">
+      <div className="col-header">
+        <span>对话</span>
+        <span className="muted mono" style={{ marginLeft: 'auto' }}>{convId?.slice(0, 12) ?? ''}</span>
       </div>
 
       <div className="conv-messages">
         {messages.length === 0 && (
-          <div className="empty">与 BioAgent 对话，用自然语言描述分析需求，例如「聚类，分辨率 1.0」。</div>
+          <div className="empty">
+            与 BioAgent 对话，用自然语言描述分析需求，例如「聚类，分辨率 1.0」。
+          </div>
         )}
         {messages.map((m) => (
           <div key={m.id} className={`msg ${m.role}`}>
@@ -55,7 +56,7 @@ export default function ConversationPanel({
         ))}
         {busy && (
           <div className="msg assistant">
-            <span className="spin">⏳</span> 分析执行中，可在右侧 DAG 面板查看事件进度…
+            分析执行中，事件进度见历史面板…
           </div>
         )}
       </div>
@@ -68,10 +69,12 @@ export default function ConversationPanel({
 
       <div className="conv-input">
         <textarea
-          placeholder="描述你的分析需求…（v0.1 规则引擎：QC / 聚类 / 注释 / UMAP / 差异表达 / 继续）"
+          placeholder="描述分析需求…（QC / 聚类 / 注释 / UMAP / 差异表达 / 继续）"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(text) } }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(text) }
+          }}
         />
         <button className="primary" disabled={busy || !text.trim()} onClick={() => send(text)}>发送</button>
       </div>

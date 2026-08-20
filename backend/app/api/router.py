@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..capabilities.definitions import CAPABILITIES_BY_ID, get_capability, list_capabilities
@@ -193,7 +194,7 @@ def send_message(conv_id: str, body: MessageSend, db: Session = Depends(get_db))
         # 异步：用户消息与占位助手消息立即可见，线程执行并回填
         user_msg = Message(conversation_id=c.id, role=MessageRole.user, content=body.content)
         placeholder = Message(conversation_id=c.id, role=MessageRole.assistant,
-                              content="⏳ 分析执行中…（可在右侧 DAG 面板查看事件状态）")
+                              content="分析执行中…（事件状态见历史面板）")
         db.add(user_msg)
         db.add(placeholder)
         db.commit()
@@ -366,6 +367,41 @@ def set_conversation_environment(conv_id: str, body: SetEnvironmentBody,
 def agent_status():
     from ..services import llm as llm_svc
     return llm_svc.llm_status()
+
+
+@router.get("/settings")
+def get_settings():
+    """运行时工作模式 / Agent 模式配置。"""
+    from ..services import llm as llm_svc
+    return {
+        "executor_mode": settings.executor_mode,
+        "llm_mode": settings.llm_mode,
+        "llm_configured": bool(settings.llm_api_key),
+        "llm_model": settings.llm_model,
+        "version": settings.version,
+        "agent_status": llm_svc.llm_status(),
+    }
+
+
+class SettingsPatch(BaseModel):
+    executor_mode: str | None = None   # mock | auto | local
+    llm_mode: str | None = None        # off | echo | real
+
+
+@router.patch("/settings")
+def patch_settings(body: SettingsPatch):
+    """运行时切换工作模式 / Agent 模式（进程内生效，重启后按环境变量）。"""
+    if body.executor_mode is not None:
+        if body.executor_mode not in ("mock", "auto", "local"):
+            raise HTTPException(400, "executor_mode 必须是 mock/auto/local")
+        settings.executor_mode = body.executor_mode
+    if body.llm_mode is not None:
+        if body.llm_mode not in ("off", "echo", "real"):
+            raise HTTPException(400, "llm_mode 必须是 off/echo/real")
+        if body.llm_mode == "real" and not settings.llm_api_key:
+            raise HTTPException(400, "real 模式需要配置 BIOAGENT_LLM_API_KEY")
+        settings.llm_mode = body.llm_mode
+    return get_settings()
 
 
 @router.post("/agent/intent", response_model=IntentResponse)

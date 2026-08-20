@@ -355,7 +355,7 @@ def handle_message(db: Session, conversation: Conversation, content: str,
 def _event_summary(ev: AnalysisEvent) -> str:
     if ev.status == EventStatus.failed:
         err = (ev.error or {}).get("message", "未知错误")
-        return f"- ❌ {ev.capability_id} 失败：{err}"
+        return f"- {ev.capability_id} 失败：{err}"
     metrics = ev.metrics
     detail = ""
     if ev.capability_id == "scrna.clustering":
@@ -367,4 +367,4 @@ def _event_summary(ev: AnalysisEvent) -> str:
     out = ev.output
     n_art = len(out.get("artifacts") or [])
     n_ds = len(out.get("datasets") or [])
-    return f"- ✅ {ev.capability_id}{detail}｜产物 {n_art} 个，数据集 {n_ds} 个（{ev.id}）"
+    return f"- {ev.capability_id}{detail}（产物 {n_art} 个，数据集 {n_ds} 个，{ev.id}）"

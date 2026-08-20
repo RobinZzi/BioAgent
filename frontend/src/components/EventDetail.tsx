@@ -13,20 +13,25 @@ const CAP_LABEL: Record<string, string> = {
   'bulk_rna.alignment': '序列比对',
 }
 
-export default function EventDetail({ eventId, onClose, onRefresh }: {
-  eventId: string; onClose: () => void; onRefresh: () => void
+export default function EventDetail({ eventId, onClose }: {
+  eventId: string
+  onClose: () => void
 }) {
   const [ev, setEv] = useState<AnalysisEvent | null>(null)
   const [logs, setLogs] = useState('')
   const [showLogs, setShowLogs] = useState(false)
 
   useEffect(() => {
+    setEv(null)
+    setShowLogs(false)
+    setLogs('')
     api.event(eventId).then(setEv).catch(console.error)
   }, [eventId])
 
   const loadLogs = async () => {
-    setShowLogs(!showLogs)
-    if (!showLogs) {
+    const next = !showLogs
+    setShowLogs(next)
+    if (next) {
       const r = await api.eventLogs(eventId)
       setLogs(r.logs)
     }
@@ -35,18 +40,20 @@ export default function EventDetail({ eventId, onClose, onRefresh }: {
   if (!ev) return <div className="empty">加载事件…</div>
 
   return (
-    <div className="card event-detail">
+    <div className="event-detail">
       <div className="flex" style={{ marginBottom: 8 }}>
-        <h3 style={{ margin: 0, fontSize: 15 }}>{CAP_LABEL[ev.capability_id] ?? ev.capability_id}</h3>
-        <span className={`badge ${ev.status === 'succeeded' ? 'green' : ev.status === 'failed' ? 'red' : 'amber'}`}>{ev.status}</span>
+        <span style={{ fontWeight: 600 }}>{CAP_LABEL[ev.capability_id] ?? ev.capability_id}</span>
+        <span className={`badge ${ev.status === 'succeeded' ? 'green' : ev.status === 'failed' ? 'red' : 'amber'}`}>
+          {ev.status}
+        </span>
         <span className="muted mono">{ev.id}</span>
-        <span className="spacer" style={{ flex: 1 }} />
+        <span className="spacer" />
         <button onClick={loadLogs}>{showLogs ? '收起日志' : '查看日志'}</button>
         <button onClick={onClose}>关闭</button>
       </div>
 
       {ev.error && (
-        <div className="card" style={{ background: 'rgba(224,91,91,.08)', borderColor: 'var(--red)', marginBottom: 10 }}>
+        <div className="card" style={{ background: 'var(--red-soft)', borderColor: 'var(--red)', marginBottom: 10 }}>
           <b style={{ color: 'var(--red)' }}>执行失败：{ev.error.message}</b>
           {ev.error.stage && <div className="muted">stage: {ev.error.stage} · type: {ev.error.type}</div>}
         </div>
@@ -54,7 +61,7 @@ export default function EventDetail({ eventId, onClose, onRefresh }: {
 
       <div className="detail-grid">
         <div>
-          <div className="kv"><span className="k">实现</span><span className="mono">{ev.implementation} {ev.runtime_id && `@ ${ev.runtime_id}`}</span></div>
+          <div className="kv"><span className="k">实现</span><span className="mono">{ev.implementation}{ev.runtime_id ? ` @ ${ev.runtime_id}` : ''}</span></div>
           <div className="kv"><span className="k">输入数据集</span><span className="mono">{(ev.inputs.dataset as string) ?? '—'}</span></div>
           <div className="kv"><span className="k">参数</span><span className="mono">{JSON.stringify(ev.parameters)}</span></div>
           <div className="kv"><span className="k">执行模式</span><span className="mono">{String(ev.metrics.executor_mode ?? '—')}</span></div>
