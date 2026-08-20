@@ -16,6 +16,88 @@ from ..models import AnalysisEvent, Conversation, Dataset, EventStatus
 from .execution import create_and_run_event
 from . import llm as llm_svc
 
+# ---------------------------------------------------------------- 标准分析流程
+# 说「做完整分析」→ 按序执行的标准流程（步骤间的输入由数据集链自动衔接）
+WORKFLOWS: dict[str, dict] = {
+    "scrna.standard": {
+        "name": "单细胞标准分析流程",
+        "steps": ["scrna.qc", "scrna.normalization", "scrna.pca", "scrna.umap",
+                  "scrna.clustering", "scrna.annotation", "scrna.marker_genes"],
+    },
+    "bulk_rna.standard": {
+        "name": "Bulk RNA 标准分析流程",
+        "steps": ["bulk_rna.qc", "bulk_rna.normalization",
+                  "bulk_rna.differential_expression", "bulk_rna.volcano",
+                  "bulk_rna.heatmap", "bulk_rna.go_enrichment", "bulk_rna.gsea"],
+    },
+}
+
+_WF_KEYWORDS = ("完整分析", "全流程", "标准流程", "完整流程", "全流程分析",
+                "full analysis", "standard workflow", "完整流程分析")
+
+
+def _detect_workflow(text: str, db: Session, conversation: Conversation) -> str | None:
+    """识别「做完整分析」意图，按项目现有数据推断流程域。返回 workflow_id 或 None。"""
+    low = text.lower()
+    if not any(k in low for k in _WF_KEYWORDS):
+        return None
+    # 显式域
+    if any(k in low for k in ("bulk", "转录组", "差异表达流程")):
+        return "bulk_rna.standard"
+    if any(k in low for k in ("单细胞", "scrna", "细胞流程")):
+        return "scrna.standard"
+    # 按现有数据推断
+    if find_dataset(db, conversation.project_id, "scrna", "raw") is not None:
+        return "scrna.standard"
+    if find_dataset(db, conversation.project_id, "bulk_rna", "raw") is not None:
+        return "bulk_rna.standard"
+    if find_dataset(db, conversation.project_id, "fastq", "raw") is not None:
+        return "scrna.standard"   # 默认按单细胞（若是 bulk 下机可显式说「bulk 完整分析」）
+    return None
+
+
+def execute_workflow(db: Session, conversation: Conversation, workflow_id: str,
+                     message_id: str | None = None) -> list[AnalysisEvent]:
+    """按序执行标准流程。每步输入 = 上一步输出；fastq 数据自动补 10x 导入。"""
+    wf = WORKFLOWS.get(workflow_id)
+    if wf is None:
+        raise PlanError(f"未知流程: {workflow_id}")
+    events: list[AnalysisEvent] = []
+    project = conversation.project
+    for step_id in wf["steps"]:
+        cap = get_capability(step_id)
+        input_ds: Dataset | None = None
+        if events:
+            out_ids = events[-1].output.get("datasets") or []
+            if out_ids:
+                input_ds = db.get(Dataset, out_ids[-1])
+        if input_ds is None:
+            input_ds = find_dataset(db, project.id, cap["dataset_dtype"], cap["requires_phase"])
+        if input_ds is None:
+            # dtype 桥接：需要 scrna 但有 fastq → 自动 10x 导入
+            if cap["dataset_dtype"] == "scrna":
+                fastq = find_dataset(db, project.id, "fastq", "raw")
+                if fastq is not None:
+                    imp = get_capability("scrna.import_10x")
+                    p, _ = validate_parameters(imp, {})
+                    ev = create_and_run_event(db, project, conversation, "scrna.import_10x",
+                                              p, fastq, message_id=message_id)
+                    events.append(ev)
+                    if ev.status == EventStatus.failed:
+                        break
+                    input_ds = db.get(Dataset, ev.output["datasets"][-1])
+            if input_ds is None:
+                raise PlanError(f"流程步骤 {step_id} 缺少输入数据集（{cap['dataset_dtype']}/{cap['requires_phase']}）")
+        params, errs = validate_parameters(cap, {})
+        if errs:
+            raise PlanError("参数校验失败: " + "; ".join(errs))
+        ev = create_and_run_event(db, project, conversation, step_id, params,
+                                  input_ds, message_id=message_id)
+        events.append(ev)
+        if ev.status == EventStatus.failed:
+            break
+    return events
+
 # ---------------------------------------------------------------- 意图规则
 # (关键词列表, capability_id, 参数缺省, 说明)。顺序即优先级（先匹配先得）。
 INTENT_RULES: list[tuple[list[str], str, dict, str]] = [
@@ -304,6 +386,23 @@ def handle_message(db: Session, conversation: Conversation, content: str,
         db.flush()
         db.commit()
         return {"user_message": user_msg, "assistant_message": assistant, "events": events}
+
+    # ---- 标准分析流程（Workflow）：「做完整分析」优先于单能力 ----
+    wf_id = _detect_workflow(content, db, conversation)
+    if wf_id is not None:
+        try:
+            wf_events = execute_workflow(db, conversation, wf_id, message_id=user_msg.id)
+        except PlanError as e:
+            return reply(f"无法执行完整分析：{e}", [])
+        user_msg.triggered_event_ids = [e.id for e in wf_events]
+        db.flush()
+        wf = WORKFLOWS[wf_id]
+        lines = [f"已按「{wf['name']}」顺序执行："]
+        for ev in wf_events:
+            lines.append(_event_summary(ev))
+        if any(ev.status == EventStatus.failed for ev in wf_events):
+            lines.append("（流程在某一步失败后中断）")
+        return reply("\n".join(lines), wf_events)
 
     intent = None
     llm_ctx = None

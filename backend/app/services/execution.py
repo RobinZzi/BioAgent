@@ -43,12 +43,14 @@ def load_manifest(db: Session, env_id: str | None) -> Manifest | None:
 
 
 def _is_mock_dataset(ds: Dataset) -> bool:
-    """mock 占位文件以 `\\x89HDF placeholder` 开头（真实 h5ad 以 `\\x89HDF\\r\\n` 开头）。"""
+    """mock 占位文件以 `\\x89HDF placeholder` 或 `\\x89HDF mock` 开头
+    （真实 h5ad 以 `\\x89HDF\\r\\n` 开头）。"""
     if ds.metadata_ and ds.metadata_.get("mock"):
         return True
     try:
         with open(ds.location, "rb") as f:
-            return f.read(16).startswith(b"\x89HDF placeholder")
+            head = f.read(16)
+        return head.startswith(b"\x89HDF placeholder") or head.startswith(b"\x89HDF mock")
     except OSError:
         return False
 

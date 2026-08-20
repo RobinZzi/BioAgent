@@ -253,7 +253,7 @@ def register_dataset(project_id: str, body: DatasetRegister, db: Session = Depen
         pd = project_dir(project_id) / "datasets"
         pd.mkdir(parents=True, exist_ok=True)
         loc = pd / body.name
-        loc.write_bytes(b"\x89HDF mock placeholder")
+        loc.write_bytes(b"\x89HDF placeholder (registered mock)")
         (pd / (body.name + ".meta.json")).write_text(
             '{"mock": true, "registered": true}', encoding="utf-8")
         location = str(loc)

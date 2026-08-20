@@ -3,6 +3,7 @@ import { api } from '../api'
 import type { Message } from '../types'
 
 const QUICK = [
+  ['完整分析', '做完整分析'],
   ['数据检查', '帮我看看这个数据质量'],
   ['QC', 'QC'],
   ['聚类', '聚类，分辨率 0.5'],

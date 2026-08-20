@@ -233,7 +233,7 @@ CAPABILITIES: list[dict] = [
         keywords=["bulk 标准化"],
     ),
     _cap(
-        "bulk_rna.differential_expression", "差异表达", "bulk_rna", "bulk_rna", "normalized", "de", False,
+        "bulk_rna.differential_expression", "差异表达", "bulk_rna", "bulk_rna", "normalized", "de", True,
         [DESEQ2, EDGER],
         {"design": _p("string", "condition", description="比较设计（如 condition）"),
          "padj_cutoff": _p("number", 0.05, minimum=0.0, maximum=1.0, description="校正 p 值阈值")},

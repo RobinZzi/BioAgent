@@ -380,6 +380,8 @@ class MockExecutor(BaseExecutor):
                 w.writerow(["gene", "baseMean", "log2FoldChange", "padj"])
                 w.writerows(rows)
             add_file("csv", "deseq2_results.csv")
+            add_dataset(f"{input_stem}_deseq2.csv", "bulk_rna", "csv", "de",
+                        {"n_up": n_up, "n_down": n_down})
             metrics = {"n_genes_tested": n_genes, "n_up": n_up, "n_down": n_down,
                        "padj_cutoff": params.get("padj_cutoff")}
             _write_html(outdir / "de_report.html", "差异表达报告",
