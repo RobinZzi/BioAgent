@@ -20,7 +20,8 @@ from ..schemas import (
     ArtifactOut, CapabilityOut, ConversationOut, DagOut, DatasetOut,
     DatasetRegister, EnvironmentOut, EventOut, IntentRequest, IntentResponse,
     MessageOut, MessageResult, MessageSend, ProjectCreate, ProjectDetail,
-    ProjectOut, RegisterRemoteBody, RerunBody, ResolveOut, SetEnvironmentBody,
+    ProjectOut, RegisterRemoteBody, RegisterSSHBody, RerunBody, ResolveOut,
+    SetEnvironmentBody,
 )
 from ..services import agent as agent_svc
 from ..services import dag as dag_svc
@@ -70,6 +71,8 @@ def _env_out(e: ComputeEnvironment) -> EnvironmentOut:
         env_type=e.env_type.value if hasattr(e.env_type, "value") else e.env_type,
         manifest=e.manifest or {}, status=e.status.value if hasattr(e.status, "value") else e.status,
         connector_url=e.connector_url,
+        ssh_host=e.ssh_host, ssh_port=e.ssh_port, ssh_user=e.ssh_user,
+        ssh_has_password=bool(e.ssh_password), ssh_key_path=e.ssh_key_path,
         discovered_at=e.discovered_at,
     )
 
@@ -334,6 +337,48 @@ def register_remote_environment(project_id: str, body: RegisterRemoteBody,
     return _env_out(env)
 
 
+@router.post("/projects/{project_id}/environments/register-ssh", response_model=EnvironmentOut)
+def register_ssh_environment(project_id: str, body: RegisterSSHBody,
+                             db: Session = Depends(get_db)):
+    """注册 SSH 直连环境（方案 B：后端直连）。密码加密存储，接口不回显明文。"""
+    p = _get_project(db, project_id)
+    from ..utils.crypto import encrypt
+    # 连接测试（失败仍保存，标记 unreachable，用户可后续再测）
+    ok, detail = _test_ssh(body.host, body.port, body.user, body.password, body.key_path)
+    env = ComputeEnvironment(
+        id=new_id("env"), project_id=p.id, name=body.name, env_type=EnvType.remote,
+        ssh_host=body.host, ssh_port=body.port, ssh_user=body.user,
+        ssh_password=encrypt(body.password) if body.password else None,
+        ssh_key_path=body.key_path or None,
+        status=EnvStatus.healthy if ok else EnvStatus.unreachable,
+        discovered_at=utcnow())
+    db.add(env)
+    db.commit()
+    db.refresh(env)
+    out = _env_out(env)
+    return out
+
+
+def _test_ssh(host: str, port: int, user: str, password: str, key_path: str) -> tuple[bool, str]:
+    import paramiko
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        kw = dict(hostname=host, port=port, username=user, timeout=15, banner_timeout=15)
+        if key_path:
+            kw["key_filename"] = key_path
+        elif password:
+            kw["password"] = password
+        else:
+            kw["allow_agent"] = True
+        client.connect(**kw)
+        return True, "连接成功"
+    except Exception as e:  # noqa: BLE001
+        return False, str(e)
+    finally:
+        client.close()
+
+
 @router.post("/environments/{env_id}/test")
 def test_environment(env_id: str, db: Session = Depends(get_db)):
     env = db.get(ComputeEnvironment, env_id)
@@ -343,7 +388,15 @@ def test_environment(env_id: str, db: Session = Depends(get_db)):
         from ..executor.remote import LocalConnectorExecutor
         ok, detail = LocalConnectorExecutor.test_connection(
             env.connector_url, env.connector_token or "")
-        return {"ok": ok, "detail": detail, "env_type": "remote"}
+        return {"ok": ok, "detail": detail, "env_type": "connector"}
+    if env.env_type == EnvType.remote and env.ssh_host:
+        from ..utils.crypto import decrypt
+        ok, detail = _test_ssh(env.ssh_host, env.ssh_port, env.ssh_user or "",
+                               decrypt(env.ssh_password or ""), env.ssh_key_path or "")
+        # 更新状态
+        env.status = EnvStatus.healthy if ok else EnvStatus.unreachable
+        db.commit()
+        return {"ok": ok, "detail": detail, "env_type": "ssh"}
     return {"ok": True, "detail": "本地环境（直接执行）", "env_type": "local"}
 
 

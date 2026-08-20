@@ -51,6 +51,8 @@ export const api = {
     req<Environment>(`/environments/${envId}/rediscover`, { method: 'POST' }),
   registerRemoteEnvironment: (projectId: string, body: { name: string; connector_url: string; token: string }) =>
     req<Environment>(`/projects/${projectId}/environments/register-remote`, { method: 'POST', body: JSON.stringify(body) }),
+  registerSSHEnvironment: (projectId: string, body: { name: string; host: string; port: number; user: string; password: string; key_path: string }) =>
+    req<Environment>(`/projects/${projectId}/environments/register-ssh`, { method: 'POST', body: JSON.stringify(body) }),
   testEnvironment: (envId: string) =>
     req<{ ok: boolean; detail: string; env_type: string }>(`/environments/${envId}/test`, { method: 'POST' }),
   setConversationEnvironment: (convId: string, environmentId: string) =>

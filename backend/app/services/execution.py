@@ -148,6 +148,14 @@ def create_and_run_event(
         executor = LocalConnectorExecutor(project_dir(project.id), env.connector_url,
                                           env.connector_token or "")
         mode_note = f"remote connector ({env.connector_url})"
+    elif env is not None and env.env_type == EnvType.remote and env.ssh_host:
+        # SSH 直连执行（用户选择方案 B：后端直连，密码加密存储）
+        from ..executor.ssh import SSHExecutor
+        from ..utils.crypto import decrypt
+        executor = SSHExecutor(project_dir(project.id), env.ssh_host, env.ssh_port,
+                               env.ssh_user or "", decrypt(env.ssh_password or ""),
+                               env.ssh_key_path)
+        mode_note = f"ssh ({env.ssh_user}@{env.ssh_host}:{env.ssh_port})"
     elif settings.executor_mode == "auto" and input_dataset is not None and _is_mock_dataset(input_dataset):
         # mock 占位数据 → 沿用 mock 执行（真实 scanpy 读不了占位文件）
         from ..executor.mock import MockExecutor

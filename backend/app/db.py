@@ -44,6 +44,11 @@ def _migrate_missing_columns() -> None:
         "environments": {
             "connector_url": "TEXT",
             "connector_token": "TEXT",
+            "ssh_host": "TEXT",
+            "ssh_port": "INTEGER",
+            "ssh_user": "TEXT",
+            "ssh_password": "TEXT",
+            "ssh_key_path": "TEXT",
         },
     }
     with engine.begin() as conn:

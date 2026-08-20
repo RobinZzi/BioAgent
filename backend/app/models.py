@@ -172,6 +172,12 @@ class ComputeEnvironment(Base):
     # 远程环境（Local Connector 协议）：连接信息 + 共享令牌（非 SSH 凭据）
     connector_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     connector_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 远程环境（SSH 直连）：账号/密码/密钥（密码加密存储，接口不回显）
+    ssh_host: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ssh_port: Mapped[int] = mapped_column(default=22)
+    ssh_user: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ssh_password: Mapped[str | None] = mapped_column(Text, nullable=True)  # 加密
+    ssh_key_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     discovered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     project: Mapped[Project | None] = relationship(back_populates="environments")

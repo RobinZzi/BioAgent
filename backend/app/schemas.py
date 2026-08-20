@@ -87,6 +87,11 @@ class EnvironmentOut(BaseModel):
     manifest: dict = Field(default_factory=dict)
     status: str
     connector_url: str | None = None
+    ssh_host: str | None = None
+    ssh_port: int | None = None
+    ssh_user: str | None = None
+    ssh_has_password: bool = False     # 只回显是否配置密码，不回显明文
+    ssh_key_path: str | None = None
     discovered_at: datetime | None = None
 
 
@@ -226,6 +231,15 @@ class RegisterRemoteBody(BaseModel):
     name: str
     connector_url: str             # 如 http://127.0.0.1:8765
     token: str                     # Connector 共享令牌（非 SSH 凭据）
+
+
+class RegisterSSHBody(BaseModel):
+    name: str
+    host: str
+    port: int = 22
+    user: str
+    password: str = ""             # 密码或留空用密钥/agent
+    key_path: str = ""             # 本机私钥路径（可选）
 
 
 class SetEnvironmentBody(BaseModel):

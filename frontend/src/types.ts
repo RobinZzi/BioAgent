@@ -53,6 +53,11 @@ export interface Environment {
   manifest: Record<string, unknown>
   status: string
   connector_url: string | null
+  ssh_host: string | null
+  ssh_port: number | null
+  ssh_user: string | null
+  ssh_has_password: boolean
+  ssh_key_path: string | null
   discovered_at: string | null
 }
 

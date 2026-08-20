@@ -29,7 +29,9 @@ export default function SettingsPanel({
   const [resolve, setResolve] = useState<ResolveResult | null>(null)
   const [busy, setBusy] = useState(false)
   const [showRemoteForm, setShowRemoteForm] = useState(false)
+  const [showSSHForm, setShowSSHForm] = useState(false)
   const [remote, setRemote] = useState({ name: '', connector_url: '', token: '' })
+  const [ssh, setSSH] = useState({ name: '', host: '', port: '22', user: '', password: '', key_path: '' })
   const [testing, setTesting] = useState<string | null>(null)
   const [apiKey, setApiKey] = useState('')
   const [baseUrl, setBaseUrl] = useState(settings?.llm_base_url ?? '')
@@ -86,6 +88,20 @@ export default function SettingsPanel({
       })
       setShowRemoteForm(false)
       setRemote({ name: '', connector_url: '', token: '' })
+      onRefreshDetail()
+    } catch (e) { alert((e as Error).message) } finally { setBusy(false) }
+  }
+
+  const registerSSH = async () => {
+    if (!projectId || !ssh.name.trim() || !ssh.host.trim() || !ssh.user.trim()) return
+    setBusy(true)
+    try {
+      await api.registerSSHEnvironment(projectId, {
+        name: ssh.name.trim(), host: ssh.host.trim(), port: parseInt(ssh.port) || 22,
+        user: ssh.user.trim(), password: ssh.password, key_path: ssh.key_path.trim(),
+      })
+      setShowSSHForm(false)
+      setSSH({ name: '', host: '', port: '22', user: '', password: '', key_path: '' })
       onRefreshDetail()
     } catch (e) { alert((e as Error).message) } finally { setBusy(false) }
   }
@@ -182,8 +198,11 @@ export default function SettingsPanel({
               <button className="primary" onClick={discover} disabled={busy || !projectId}>
                 {busy ? '发现中…' : '本机环境发现'}
               </button>
-              <button onClick={() => setShowRemoteForm(!showRemoteForm)}>
-                {showRemoteForm ? '取消' : '注册远程 Connector'}
+              <button onClick={() => { setShowRemoteForm(!showRemoteForm); setShowSSHForm(false) }}>
+                {showRemoteForm ? '取消' : '注册 Connector'}
+              </button>
+              <button onClick={() => { setShowSSHForm(!showSSHForm); setShowRemoteForm(false) }}>
+                {showSSHForm ? '取消' : '注册 SSH 服务器'}
               </button>
             </div>
 
@@ -198,8 +217,29 @@ export default function SettingsPanel({
                          onChange={(e) => setRemote({ ...remote, token: e.target.value })} />
                   <button className="primary" onClick={registerRemote} disabled={busy}>注册并握手</button>
                 </div>
+                <div className="muted" style={{ marginTop: 6 }}>令牌仅用于 Connector 调用鉴权，非 SSH 凭据。</div>
+              </div>
+            )}
+
+            {showSSHForm && (
+              <div className="card" style={{ marginBottom: 10 }}>
+                <div className="create-form">
+                  <input placeholder="环境名（如 Lab HPC）" value={ssh.name}
+                         onChange={(e) => setSSH({ ...ssh, name: e.target.value })} />
+                  <input placeholder="服务器地址（host）" value={ssh.host}
+                         onChange={(e) => setSSH({ ...ssh, host: e.target.value })} />
+                  <input placeholder="端口" value={ssh.port} style={{ width: 70 }}
+                         onChange={(e) => setSSH({ ...ssh, port: e.target.value })} />
+                  <input placeholder="账号" value={ssh.user}
+                         onChange={(e) => setSSH({ ...ssh, user: e.target.value })} />
+                  <input type="password" placeholder="密码（或留空用密钥）" value={ssh.password}
+                         onChange={(e) => setSSH({ ...ssh, password: e.target.value })} />
+                  <input placeholder="私钥路径（可选）" value={ssh.key_path}
+                         onChange={(e) => setSSH({ ...ssh, key_path: e.target.value })} />
+                  <button className="primary" onClick={registerSSH} disabled={busy}>注册</button>
+                </div>
                 <div className="muted" style={{ marginTop: 6 }}>
-                  令牌仅用于 Connector 调用鉴权，非 SSH 凭据。
+                  密码加密存储于本机后端，接口不回显明文。注册时会做一次连接测试（失败仍保存，标记不可用）。
                 </div>
               </div>
             )}
@@ -209,13 +249,19 @@ export default function SettingsPanel({
                 <div className="flex">
                   <b>{env.name}</b>
                   <span className={`badge ${env.status === 'healthy' ? 'green' : 'amber'}`}>{env.status}</span>
-                  <span className="badge gray">{env.env_type === 'remote' ? '远程' : '本地'}</span>
+                  <span className="badge gray">{env.env_type === 'remote' ? (env.ssh_host ? 'SSH' : '远程') : '本地'}</span>
                   <span className="spacer" />
                   <button onClick={() => testEnv(env.id)} disabled={testing === env.id}>
                     {testing === env.id ? '测试中' : '测试'}
                   </button>
                 </div>
                 {env.connector_url && <div className="muted mono" style={{ marginTop: 4 }}>{env.connector_url}</div>}
+                {env.ssh_host && (
+                  <div className="muted mono" style={{ marginTop: 4 }}>
+                    {env.ssh_user}@{env.ssh_host}:{env.ssh_port}
+                    {env.ssh_has_password ? ' · 密码已配置' : env.ssh_key_path ? ' · 密钥已配置' : ' · 未配置凭据'}
+                  </div>
+                )}
                 <details style={{ marginTop: 8 }}>
                   <summary className="muted" style={{ cursor: 'pointer' }}>Manifest</summary>
                   <pre className="env-manifest">{JSON.stringify(env.manifest, null, 2)}</pre>
