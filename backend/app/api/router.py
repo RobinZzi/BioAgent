@@ -340,43 +340,67 @@ def register_remote_environment(project_id: str, body: RegisterRemoteBody,
 @router.post("/projects/{project_id}/environments/register-ssh", response_model=EnvironmentOut)
 def register_ssh_environment(project_id: str, body: RegisterSSHBody,
                              db: Session = Depends(get_db)):
-    """注册 SSH 直连环境（方案 B：后端直连）。密码加密存储，接口不回显明文。"""
+    """注册 SSH 直连环境（方案 B：后端直连）。密码加密存储，接口不回显明文。
+    注册时连接并执行远程工具发现，生成 Manifest。"""
     p = _get_project(db, project_id)
     from ..utils.crypto import encrypt
-    # 连接测试（失败仍保存，标记 unreachable，用户可后续再测）
-    ok, detail = _test_ssh(body.host, body.port, body.user, body.password, body.key_path)
+    ok, detail, manifest = _ssh_probe(body.host, body.port, body.user,
+                                      body.password, body.key_path)
     env = ComputeEnvironment(
         id=new_id("env"), project_id=p.id, name=body.name, env_type=EnvType.remote,
         ssh_host=body.host, ssh_port=body.port, ssh_user=body.user,
         ssh_password=encrypt(body.password) if body.password else None,
         ssh_key_path=body.key_path or None,
+        manifest=manifest or {},
         status=EnvStatus.healthy if ok else EnvStatus.unreachable,
         discovered_at=utcnow())
     db.add(env)
     db.commit()
     db.refresh(env)
-    out = _env_out(env)
-    return out
+    return _env_out(env)
 
 
-def _test_ssh(host: str, port: int, user: str, password: str, key_path: str) -> tuple[bool, str]:
+def _ssh_connect(host: str, port: int, user: str, password: str, key_path: str):
+    """建立 SSH 连接，返回 (client, error)。client 失败时为 None。"""
     import paramiko
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    kw = dict(hostname=host, port=port, username=user, timeout=20, banner_timeout=20)
+    if key_path:
+        kw["key_filename"] = key_path
+    elif password:
+        kw["password"] = password
+    else:
+        kw["allow_agent"] = True
     try:
-        kw = dict(hostname=host, port=port, username=user, timeout=15, banner_timeout=15)
-        if key_path:
-            kw["key_filename"] = key_path
-        elif password:
-            kw["password"] = password
-        else:
-            kw["allow_agent"] = True
         client.connect(**kw)
-        return True, "连接成功"
+        return client, None
     except Exception as e:  # noqa: BLE001
-        return False, str(e)
+        client.close()
+        return None, str(e)
+
+
+def _ssh_probe(host: str, port: int, user: str, password: str, key_path: str):
+    """连接 + 远程工具发现。返回 (ok, detail, manifest_dict|None)。"""
+    client, err = _ssh_connect(host, port, user, password, key_path)
+    if client is None:
+        return False, err, None
+    try:
+        from ..env.remote_discovery import discover_remote
+        manifest = discover_remote(client)
+        return True, "连接成功", manifest.model_dump()
+    except Exception as e:  # noqa: BLE001
+        return False, f"连接成功但发现失败：{e}", None
     finally:
         client.close()
+
+
+def _test_ssh(host: str, port: int, user: str, password: str, key_path: str) -> tuple[bool, str]:
+    client, err = _ssh_connect(host, port, user, password, key_path)
+    if client is not None:
+        client.close()
+        return True, "连接成功"
+    return False, err
 
 
 @router.post("/environments/{env_id}/test")
@@ -391,12 +415,16 @@ def test_environment(env_id: str, db: Session = Depends(get_db)):
         return {"ok": ok, "detail": detail, "env_type": "connector"}
     if env.env_type == EnvType.remote and env.ssh_host:
         from ..utils.crypto import decrypt
-        ok, detail = _test_ssh(env.ssh_host, env.ssh_port, env.ssh_user or "",
-                               decrypt(env.ssh_password or ""), env.ssh_key_path or "")
-        # 更新状态
+        ok, detail, manifest = _ssh_probe(env.ssh_host, env.ssh_port, env.ssh_user or "",
+                                          decrypt(env.ssh_password or ""), env.ssh_key_path or "")
         env.status = EnvStatus.healthy if ok else EnvStatus.unreachable
+        if manifest:
+            env.manifest = manifest
+        env.discovered_at = utcnow()
         db.commit()
-        return {"ok": ok, "detail": detail, "env_type": "ssh"}
+        return {"ok": ok, "detail": detail, "env_type": "ssh",
+                "manifest_runtimes": len((manifest or {}).get("runtimes", [])),
+                "manifest_tools": len((manifest or {}).get("tools", []))}
     return {"ok": True, "detail": "本地环境（直接执行）", "env_type": "local"}
 
 
