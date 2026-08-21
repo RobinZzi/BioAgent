@@ -227,9 +227,10 @@ def create_and_run_event(
     result = executor.execute(task, capability)
     result.metrics.setdefault("executor_mode", mode_note)
 
-    # 执行日志落盘
+    # 执行日志落盘（executor 已实时写入则保留，否则写 result.log_lines）
     log_path = outdir / "execution.log"
-    log_path.write_text("\n".join(result.log_lines or []) + "\n", encoding="utf-8")
+    if not log_path.exists() or log_path.stat().st_size == 0:
+        log_path.write_text("\n".join(result.log_lines or []) + "\n", encoding="utf-8")
     event.log_path = str(log_path)
 
     if not result.ok:

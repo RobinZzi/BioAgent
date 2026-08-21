@@ -3,7 +3,7 @@ import threading
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -806,6 +806,54 @@ def diagnose_event(event_id: str, db: Session = Depends(get_db)):
     ev = _get_event(db, event_id)
     from ..services.diagnostics import diagnose_failure
     return diagnose_failure(ev)
+
+
+@router.get("/events/{event_id}/stream")
+def event_stream(event_id: str, token: str = "", db: Session = Depends(get_db)):
+    """SSE 实时日志流：推送事件执行日志（增量），事件结束推送 done。"""
+    import time
+
+    user = db.query(User).filter(User.token == token).first()
+    if not user:
+        raise HTTPException(401, "未认证")
+    ev = _get_event(db, event_id)
+    path = ev.log_path
+
+    def generate():
+        offset = 0
+        while True:
+            if path and Path(path).exists():
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        f.seek(offset)
+                        new = f.read()
+                        offset += len(new)
+                    for line in new.splitlines():
+                        if line.strip():
+                            yield f"data: {line}\n\n"
+                except OSError:
+                    pass
+            s = SessionLocal()
+            e = s.get(AnalysisEvent, event_id)
+            finished = e is not None and e.status in ("succeeded", "failed", "cancelled")
+            s.close()
+            if finished:
+                if path and Path(path).exists():
+                    try:
+                        with open(path, encoding="utf-8") as f:
+                            f.seek(offset)
+                            tail = f.read()
+                        if tail.strip():
+                            for line in tail.splitlines():
+                                if line.strip():
+                                    yield f"data: {line}\n\n"
+                    except OSError:
+                        pass
+                yield "event: done\ndata: {}\n\n"
+                break
+            time.sleep(0.5)
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 @router.get("/projects/{project_id}/dag", response_model=DagOut)

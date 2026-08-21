@@ -47,6 +47,28 @@ class LocalExecutor(BaseExecutor):
         env.setdefault("MPLBACKEND", "Agg")
         return env
 
+
+    def _run_stream(self, cmd: list, log_path: Path, timeout: int, env=None):
+        """Popen 流式执行：逐行读子进程输出并实时追加到 log 文件。
+        返回 (returncode, log_lines, error)。"""
+        import os
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             text=True, env=env or os.environ)
+        lines: list[str] = []
+        try:
+            for line in p.stdout:
+                lines.append(line.rstrip())
+                with open(log_path, "a") as f:
+                    f.write(line)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            p.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            return None, lines, "timeout"
+        return p.returncode, lines, None
+
     def _collect_outputs(self, output_dir: Path) -> tuple[list[ArtifactOut], list[DatasetOut], list[str]]:
         artifacts: list[ArtifactOut] = []
         datasets: list[DatasetOut] = []
@@ -109,19 +131,17 @@ class LocalExecutor(BaseExecutor):
         script_path = outdir / "run_scanpy.py"
         script_path.write_text(script, encoding="utf-8")
 
-        try:
-            r = subprocess.run([py, str(script_path)], capture_output=True,
-                               text=True, timeout=3600, env=self._proc_env())
-        except subprocess.TimeoutExpired:
+        log_path = outdir / "execution.log"
+        code, lines, err = self._run_stream([py, str(script_path)], log_path, 3600, env=self._proc_env())
+        if err == "timeout":
             return ExecutionResult(ok=False, error={
                 "stage": "execute", "type": "Timeout",
-                "message": "scanpy 脚本执行超时（>3600s）", "log_tail": []})
-
-        log_tail = (r.stdout + r.stderr).strip().splitlines()[-20:]
-        if r.returncode != 0:
+                "message": "scanpy 脚本执行超时（>3600s）", "log_tail": lines[-20:]}, log_lines=lines[-20:])
+        log_tail = lines[-20:]
+        if code != 0:
             return ExecutionResult(ok=False, error={
                 "stage": "execute", "type": "ScriptError",
-                "message": f"scanpy 脚本退出码 {r.returncode}",
+                "message": f"scanpy 脚本退出码 {code}",
                 "log_tail": log_tail}, log_lines=log_tail)
 
         artifacts, datasets, warnings = self._collect_outputs(outdir)
@@ -141,23 +161,22 @@ class LocalExecutor(BaseExecutor):
             str(outdir / "deseq2_results.csv"), str(outdir))
         script_path = outdir / "run_deseq2.R"
         script_path.write_text(script, encoding="utf-8")
-        try:
-            r = subprocess.run([rscript, str(script_path)], capture_output=True,
-                               text=True, timeout=3600, env=self._proc_env())
-        except subprocess.TimeoutExpired:
+        log_path = outdir / "execution.log"
+        code, lines, err = self._run_stream([rscript, str(script_path)], log_path, 3600, env=self._proc_env())
+        if err == "timeout":
             return ExecutionResult(ok=False, error={
                 "stage": "execute", "type": "Timeout",
                 "message": "R 脚本执行超时（>3600s）", "log_tail": []})
-        log_tail = (r.stdout + r.stderr).strip().splitlines()[-20:]
-        if r.returncode != 0:
+        log_tail = lines[-20:]
+        if code != 0:
             return ExecutionResult(ok=False, error={
                 "stage": "execute", "type": "ScriptError",
-                "message": f"Rscript 退出码 {r.returncode}（检查是否安装 DESeq2）",
+                "message": f"Rscript 退出码 {code}（检查是否安装 DESeq2）",
                 "log_tail": log_tail})
         artifacts, datasets, warnings = self._collect_outputs(outdir)
         return ExecutionResult(ok=True, metrics={"impl": task.implementation},
                                artifacts=artifacts, datasets=datasets,
-                               log_lines=(r.stdout + r.stderr).splitlines()[-30:])
+                               log_lines=lines[-30:])
 
     # ------------------------------------------------------------ bash
 
@@ -168,18 +187,17 @@ class LocalExecutor(BaseExecutor):
                                               task.input_dataset_path or "", str(outdir))
         script_path = outdir / "run.sh"
         script_path.write_text(script, encoding="utf-8")
-        try:
-            r = subprocess.run(["bash", str(script_path)], capture_output=True,
-                               text=True, timeout=7200, env=self._proc_env())
-        except subprocess.TimeoutExpired:
+        log_path = outdir / "execution.log"
+        code, lines, err = self._run_stream(["bash", str(script_path)], log_path, 7200, env=self._proc_env())
+        if err == "timeout":
             return ExecutionResult(ok=False, error={
                 "stage": "execute", "type": "Timeout",
                 "message": "STAR 比对超时（>7200s）", "log_tail": []})
-        log_tail = (r.stdout + r.stderr).strip().splitlines()[-20:]
-        if r.returncode != 0:
+        log_tail = lines[-20:]
+        if code != 0:
             return ExecutionResult(ok=False, error={
                 "stage": "execute", "type": "ScriptError",
-                "message": f"STAR 脚本退出码 {r.returncode}（检查 STAR/samtools 是否安装）",
+                "message": f"STAR 脚本退出码 {code}（检查 STAR/samtools 是否安装）",
                 "log_tail": log_tail})
         artifacts, datasets, warnings = self._collect_outputs(outdir)
         return ExecutionResult(ok=True, metrics={"impl": "star"},

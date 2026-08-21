@@ -21,6 +21,8 @@ export default function EventDetail({ eventId, onClose, onChanged }: {
   const [ev, setEv] = useState<AnalysisEvent | null>(null)
   const [logs, setLogs] = useState('')
   const [showLogs, setShowLogs] = useState(false)
+  const [liveLogs, setLiveLogs] = useState('')
+  const [liveOn, setLiveOn] = useState(false)
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null)
   const [showDiagnosis, setShowDiagnosis] = useState(false)
   const [diagnosing, setDiagnosing] = useState(false)
@@ -30,9 +32,21 @@ export default function EventDetail({ eventId, onClose, onChanged }: {
     setEv(null)
     setShowLogs(false)
     setLogs('')
+    setLiveLogs('')
     setDiagnosis(null)
     api.event(eventId).then(setEv).catch(console.error)
   }, [eventId])
+
+  // SSE 实时日志流
+  useEffect(() => {
+    if (!liveOn) return
+    const token = localStorage.getItem('bioagent_token') ?? ''
+    const es = new EventSource(`/api/events/${eventId}/stream?token=${encodeURIComponent(token)}`)
+    es.onmessage = (e) => setLiveLogs((prev) => prev + e.data + '\n')
+    es.addEventListener('done', () => { es.close(); setLiveOn(false) })
+    es.onerror = () => { es.close(); setLiveOn(false) }
+    return () => es.close()
+  }, [liveOn, eventId])
 
   const loadLogs = async () => {
     const next = !showLogs
@@ -73,9 +87,19 @@ export default function EventDetail({ eventId, onClose, onChanged }: {
         </span>
         <span className="muted mono">{ev.id}</span>
         <span className="spacer" />
+        <button onClick={() => setLiveOn(!liveOn)}>{liveOn ? '停止实时' : '实时日志'}</button>
         <button onClick={loadLogs}>{showLogs ? '收起日志' : '查看日志'}</button>
         <button onClick={onClose}>关闭</button>
       </div>
+
+      {liveOn && (
+        <div style={{ marginTop: 10 }}>
+          <div className="muted" style={{ marginBottom: 4 }}>实时日志（自动滚动）</div>
+          <pre className="logs" ref={(el) => { if (el) el.scrollTop = el.scrollHeight }}>
+            {liveLogs || '等待日志…'}
+          </pre>
+        </div>
+      )}
 
       {ev.error && (
         <div className="card" style={{ background: 'var(--red-soft)', borderColor: 'var(--red)', marginBottom: 10 }}>
