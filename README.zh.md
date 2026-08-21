@@ -20,26 +20,30 @@
 
 - **数据模型**：Project → Conversation（一条分析线索，含上下文指针）→ 需求
   → AnalysisEvent → DAG；Dataset 不可变版本链；Artifact 归属事件
-- **Capability Registry**：19 个能力，语言无关契约，多实现（scanpy / Seurat /
-  DESeq2 / edgeR / clusterProfiler / STAR-bash 模板化命令）
+- **Capability Registry**：**32 个能力**，语言无关契约，多实现（scanpy / Seurat /
+  DESeq2 / edgeR / clusterProfiler / STAR-bash / fastqc / cutadapt / featureCounts /
+  cellranger 模板化命令）；覆盖 scRNA、Bulk RNA、scATAC、空间、甲基化、WES/WGS
+- **数据入口（全部闭环）**：h5ad / count matrix CSV / 下机 fastq（Bulk + 10x 单细胞）/
+  10x 矩阵（mtx）→ 对应分析流程
 - **环境发现**：conda envs / Python / R / 项目内 venv（`.venv*`）/ CLI 工具 /
-  Slurm / GPU，生成 Manifest，任何探测失败不中断
+  Slurm / GPU，生成 Manifest；远程 SSH 工具自动发现，任何探测失败不中断
 - **Executor**：异步状态机（queued → running → succeeded/failed/cancelled）
-  - `mock`：预生成真实文件产物（matplotlib 图、CSV、HTML 报告），开发/演示用
-  - `local`：scanpy / R / bash 模板脚本真实执行（**auto 模式逐个探测候选
-    runtime，跳过损坏环境，自动命中可用的 Python 3.11 venv**）
-  - `remote`：Local Connector 协议（token 鉴权 + /discover + /execute）
-  - `slurm`：Connector 内 SlurmExecutor（sbatch 模板 + sacct 轮询）
+  - `mock`：预生成真实文件产物，开发/演示用
+  - `local`：scanpy / R / bash 模板真实执行（auto 模式逐个探测候选 runtime，跳过损坏环境）
+  - `remote`：Local Connector 协议（凭据本地化）/ **SSH 直连**（密码加密存储）
+  - `slurm`：sbatch 模板 + sacct 轮询
 - **Agent Runtime**：
-  - v0.1 规则引擎：意图解析、参数提取（「分辨率 1.0」）、前置链自动补全
-    （说「聚类」自动先跑 QC→标准化→PCA→邻接图）、「继续」推进、
-    「换个分辨率重新聚类」→ re_run 边（fork）
-  - v0.2 **LLM**（OpenAI 兼容，默认 DeepSeek 端点）：意图解析 + 回复生成，
-    三模式 `off/echo/real`，任何失败自动回退规则引擎
-- **会话上下文**：指针式（current_dataset / current_phase / analysis_state），
-  「继续聚类」无需重复交代背景
-- **前端**：项目列表 → 工作台（对话面板 + 分析 DAG + 数据集链 + 产物画廊 +
-  环境/能力 + Agent 状态徽标 + 计算环境切换 + 远程 Connector 注册）
+  - 规则引擎：意图解析、参数提取（「分辨率 1.0」）、前置链自动补全、dtype 桥接
+    （fastq 自动先导入）、「继续」推进、re_run fork
+  - **LLM**（OpenAI 兼容，默认 DeepSeek）：意图解析 + 回复生成，`off/echo/real` 三模式，失败自动回退
+- **智能能力**：**一键标准分析流程**（scRNA/Bulk 各 7 步）、**可复现性**（随机种子 +
+  环境快照）、**错误恢复循环**（失败诊断 + 参数修正重跑）、**异常结果检测**、
+  **分析报告自动生成**
+- **会话上下文**：指针式，分析历史可追溯
+- **多用户**：默认单机免登录；可选认证（`BIOAGENT_AUTH_ENABLED=true`）用于共享/部署
+- **前端**：三列可拖拽工作台（项目 / 对话 / 历史），分析 DAG 连线、参数对比视图、
+  产物画廊、数据集管理（重命名/标签/删除）、工作区文件浏览、服务器项目按归属分组、
+  项目管理（多选删除 / 重命名 / 重定位）、实时日志（SSE）、Logo
 
 ## 快速开始
 

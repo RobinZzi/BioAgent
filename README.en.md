@@ -21,27 +21,34 @@ Local machine → Environment Discovery → Environment Manifest → Capability 
 
 - **Data model**: Project → Conversation (one analysis thread with context pointers)
   → intent → AnalysisEvent → DAG; immutable Dataset version chain; Artifacts owned by events
-- **Capability Registry**: 19 language-agnostic capabilities with multiple implementations
-  (scanpy / Seurat / DESeq2 / edgeR / clusterProfiler / STAR-bash templated commands)
-- **Environment Discovery**: conda envs / Python / R / in-repo venvs (`.venv*`) /
-  CLI tools / Slurm / GPU → standardized Manifest; single-point failures never abort
+- **Capability Registry**: **32 language-agnostic capabilities** with multiple implementations
+  (scanpy / Seurat / DESeq2 / edgeR / clusterProfiler / STAR-bash / fastqc / cutadapt /
+  featureCounts / cellranger templated commands); covering scRNA, Bulk RNA, scATAC,
+  spatial, methylation, WES/WGS
+- **Data inputs (all closed-loop)**: h5ad / count matrix CSV / raw fastq (Bulk + 10x scRNA) /
+  10x matrix (mtx) → corresponding analysis pipeline
+- **Environment Discovery**: conda envs / Python / R / in-repo venvs (`.venv*`) / CLI tools /
+  Slurm / GPU → standardized Manifest; remote SSH tool auto-discovery; single-point failures never abort
 - **Executor**: async state machine (queued → running → succeeded/failed/cancelled)
-  - `mock`: pre-generates real files (matplotlib figures, CSV, HTML reports) for dev/demo/CI
-  - `local`: real scanpy / R / bash template execution (**auto mode probes candidate
-    runtimes one by one, skips broken envs, auto-selects a working Python 3.11 venv**)
-  - `remote`: Local Connector protocol (token auth + /discover + /execute)
-  - `slurm`: SlurmExecutor inside the Connector (sbatch template + sacct polling)
+  - `mock`: pre-generates real files for dev/demo/CI
+  - `local`: real scanpy / R / bash template execution (auto mode probes candidate runtimes, skips broken envs)
+  - `remote`: Local Connector protocol (credential-localized) / **SSH direct** (encrypted password)
+  - `slurm`: sbatch template + sacct polling
 - **Agent Runtime**:
-  - v0.1 rule engine: intent parsing, parameter extraction ("resolution 1.0"),
-    automatic prerequisite chains ("cluster" auto-runs QC→Normalize→PCA→Neighbors),
-    "continue" advancement, "re-cluster with another resolution" → `re_run` edge (fork)
-  - v0.2 **LLM** (OpenAI-compatible, DeepSeek endpoint by default): intent parsing +
-    reply generation; three modes `off/echo/real`; any failure falls back to rules
-- **Conversation context**: pointer-based (current_dataset / current_phase /
-  analysis_state) — "keep clustering" needs no repeated context
-- **Frontend**: project list → workspace (chat panel + analysis DAG + dataset chain +
-  artifact gallery + environment/capabilities + Agent status badge + compute env
-  switcher + remote Connector registration)
+  - rule engine: intent parsing, parameter extraction ("resolution 1.0"), automatic
+    prerequisite chains, dtype bridging (fastq auto-imports first), "continue" advancement, re_run fork
+  - **LLM** (OpenAI-compatible, DeepSeek by default): intent parsing + reply generation,
+    `off/echo/real` modes, falls back to rules on failure
+- **Smart features**: **one-click standard analysis** (scRNA/Bulk 7 steps each),
+  **reproducibility** (random seed + env snapshot), **error-recovery loop** (failure
+  diagnosis + parameter-corrected rerun), **anomaly detection**, **auto analysis report**
+- **Conversation context**: pointer-based, traceable analysis history
+- **Multi-user**: standalone (no login) by default; optional auth (`BIOAGENT_AUTH_ENABLED=true`)
+  for shared/self-hosted deployments
+- **Frontend**: resizable three-column workspace (project / chat / history), analysis DAG
+  with edges, parameter-compare view, artifact gallery, dataset management (rename/tag/delete),
+  workspace file browser, server-grouped projects, project management (batch delete / rename /
+  reposition), real-time log streaming (SSE), Logo
 
 ## Quick Start
 

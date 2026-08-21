@@ -23,11 +23,13 @@
 
 ## ✨ 项目亮点 / Highlights
 
-- **自然语言分析**：Agent 理解「帮我聚类」「继续分析」等意图，自动补全前置步骤
-- **Tool ≠ Capability**：19 个语言无关分析能力，scanpy / Seurat / DESeq2 / edgeR / STAR 多实现
+- **自然语言分析**：Agent 理解「帮我聚类」「做完整分析」等意图，自动补全前置步骤
+- **多用户可选**：默认单机免登录，认证可选（共享/部署）
+- **Tool ≠ Capability**：32 个语言无关分析能力，scanpy / Seurat / DESeq2 / edgeR / STAR / cellranger 等多实现，覆盖 scRNA / Bulk / scATAC / 空间 / 甲基化 / WES-WGS
 - **真实计算环境**：本地 venv / Conda / R / Slurm / 远程 Connector（Agent 不持有 SSH 凭据）
 - **可追溯可复现**：Analysis Event + Artifact + 分析 DAG + 数据集不可变版本链
-- **LLM Agent (v0.2)**：OpenAI 兼容（默认 DeepSeek），失败自动回退规则引擎
+- **LLM Agent**：OpenAI 兼容（默认 DeepSeek），失败自动回退规则引擎
+- **一键标准分析 / 可复现 / 错误恢复 / 异常检测 / 报告生成**：完整科研闭环
 - **异步状态机**：queued → running → succeeded/failed/cancelled，mock/本地/远程三级执行
 
 ## 快速体验 / Quick Start
