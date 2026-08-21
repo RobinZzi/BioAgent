@@ -403,6 +403,7 @@ def handle_message(db: Session, conversation: Conversation, content: str,
             lines.append(_event_summary(ev))
         if any(ev.status == EventStatus.failed for ev in wf_events):
             lines.append("（流程在某一步失败后中断）")
+        lines = _append_anomalies(wf_events, lines)
         return reply("\n".join(lines), wf_events)
 
     intent = None
@@ -460,6 +461,7 @@ def handle_message(db: Session, conversation: Conversation, content: str,
     lines = [f"已执行 {note}："]
     for ev in events:
         lines.append(_event_summary(ev))
+    lines = _append_anomalies(events, lines)
     final_reply = "\n".join(lines)
     if llm_svc.enabled() and llm_ctx is not None:
         enhanced = llm_svc.generate_reply_llm(content, final_reply, llm_ctx)
@@ -484,3 +486,47 @@ def _event_summary(ev: AnalysisEvent) -> str:
     n_art = len(out.get("artifacts") or [])
     n_ds = len(out.get("datasets") or [])
     return f"- {ev.capability_id}{detail}（产物 {n_art} 个，数据集 {n_ds} 个，{ev.id}）"
+
+
+# ---------------------------------------------------------------- 异常结果检测
+def detect_anomaly(ev: AnalysisEvent) -> str | None:
+    """基于事件指标检测结果异常，返回人类可读警告（无异常返回 None）。"""
+    m = ev.metrics or {}
+    cap = ev.capability_id
+    if cap == "scrna.qc":
+        before, after = m.get("cells_before"), m.get("cells_after")
+        if before and after and after / before < 0.7:
+            return f"警告：细胞过滤比例达 {100 * (1 - after / before):.0f}%，可能数据质量差或质控阈值过严"
+        mito = m.get("median_mito_pct")
+        if isinstance(mito, (int, float)) and mito > 15:
+            return f"警告：线粒体基因占比 {mito}% 偏高，细胞活性可能较差"
+    elif cap == "scrna.clustering":
+        nc = m.get("n_clusters")
+        if isinstance(nc, int):
+            if nc > 10:
+                return f"提示：聚类数 {nc} 较多，可尝试更高分辨率或检查是否过拟合"
+            if nc < 2:
+                return "提示：聚类数过少，可降低分辨率以细分"
+    elif cap == "bulk_rna.differential_expression":
+        if m.get("n_up") == 0 and m.get("n_down") == 0:
+            return "提示：未发现显著差异基因，可放宽 padj 阈值或检查样本分组"
+    elif cap == "scrna.inspect":
+        sp = m.get("sparsity")
+        if isinstance(sp, (int, float)) and sp > 0.95:
+            return f"提示：数据高度稀疏（{sp * 100:.0f}%），可考虑过滤低表达基因"
+    return None
+
+
+def _append_anomalies(events: list, lines: list[str]) -> list[str]:
+    """把成功事件的异常提示追加到回复行。"""
+    anomalies = []
+    for ev in events:
+        if ev.status == EventStatus.succeeded:
+            a = detect_anomaly(ev)
+            if a:
+                anomalies.append(f"- {a}")
+    if anomalies:
+        lines.append("")
+        lines.append("结果检查：")
+        lines.extend(anomalies)
+    return lines
