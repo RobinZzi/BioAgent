@@ -28,6 +28,10 @@ export const api = {
   listProjects: () => req<Project[]>('/projects'),
   createProject: (body: { name: string; description?: string; data_source?: string; compute_location?: string }) =>
     req<Project>('/projects', { method: 'POST', body: JSON.stringify(body) }),
+  batchDeleteProjects: (projectIds: string[], deleteFiles: boolean) =>
+    req<{ deleted: string[]; deleted_files: boolean }>('/projects/batch-delete', {
+      method: 'POST', body: JSON.stringify({ project_ids: projectIds, delete_files: deleteFiles }),
+    }),
   projectDetail: (id: string) => req<ProjectDetail>(`/projects/${id}`),
 
   // conversations

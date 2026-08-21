@@ -196,6 +196,7 @@ a:hover { text-decoration: underline; }
 }
 .project-item:hover { background: var(--panel); border-color: var(--border); box-shadow: var(--shadow-xs); }
 .project-item.active { background: var(--panel); border-color: var(--accent); box-shadow: 0 2px 10px rgba(79,70,229,.12); }
+.project-item.selected { background: var(--accent-soft); border-color: var(--accent); }
 .project-item .name { font-weight: 600; font-size: 13px; }
 .project-item .meta { color: var(--text-dim); font-size: 11px; margin-top: 4px; }
 .new-project { margin: 8px; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-xs); }
@@ -351,3 +352,14 @@ pre.logs {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-faint); background-clip: content-box; }
+
+/* 删除确认弹窗 */
+.confirm-panel {
+  width: 380px; background: var(--panel); border-radius: 12px;
+  padding: 20px 22px; box-shadow: var(--shadow-md); align-self: center;
+  margin: auto; position: relative;
+}
+.settings-overlay { align-items: center; justify-content: center; }
+button.danger { color: var(--red); border-color: var(--red); }
+button.danger:hover { background: var(--red-soft); }
+button.primary.danger { background: linear-gradient(135deg, #ef4444, #dc2626); border-color: transparent; color: #fff; }

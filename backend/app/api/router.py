@@ -144,6 +144,31 @@ def create_project(body: ProjectCreate, db: Session = Depends(get_db)):
     return _project_out(p, db)
 
 
+class BatchDeleteBody(BaseModel):
+    project_ids: list[str]
+    delete_files: bool = True   # 是否删除项目目录（含 log / 已生成图片 / 产物文件）
+
+
+@router.post("/projects/batch-delete")
+def batch_delete_projects(body: BatchDeleteBody, db: Session = Depends(get_db)):
+    """批量删除项目。delete_files=True 时连带删除项目目录（log/图片/产物）；
+    False 时仅删除数据库记录，文件保留。"""
+    import shutil
+
+    deleted = []
+    for pid in body.project_ids:
+        p = db.get(Project, pid)
+        if p is None:
+            continue
+        pdir = project_dir(pid)
+        db.delete(p)
+        if body.delete_files and pdir.exists():
+            shutil.rmtree(pdir, ignore_errors=True)
+        deleted.append(pid)
+    db.commit()
+    return {"deleted": deleted, "deleted_files": body.delete_files}
+
+
 @router.get("/projects/{project_id}", response_model=ProjectDetail)
 def project_detail(project_id: str, db: Session = Depends(get_db)):
     p = _get_project(db, project_id)

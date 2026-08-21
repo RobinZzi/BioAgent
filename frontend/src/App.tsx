@@ -84,6 +84,19 @@ export default function App() {
     setProjectId(p.id)
   }
 
+  const deleteProjects = async (ids: string[], deleteFiles: boolean) => {
+    try {
+      const r = await api.batchDeleteProjects(ids, deleteFiles)
+      if (projectId && ids.includes(projectId)) {
+        setProjectId(null)
+        setDetail(null)
+        setConv(null)
+      }
+      refreshProjects()
+      alert(`已删除 ${r.deleted.length} 个项目${deleteFiles ? '（含文件）' : '（保留文件）'}`)
+    } catch (e) { alert((e as Error).message) }
+  }
+
   const switchEnv = async (envId: string) => {
     const convId = conv?.conversation.id
     if (!convId) return
@@ -113,6 +126,7 @@ export default function App() {
           currentId={projectId}
           onSelect={setProjectId}
           onCreate={createProject}
+          onDelete={deleteProjects}
         />
 
         <ConversationColumn
