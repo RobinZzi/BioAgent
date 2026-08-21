@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from './api'
 import type { ConversationDetail, Project, ProjectDetail, Settings } from './types'
+import LoginPage from './components/LoginPage'
 import TopBar from './components/TopBar'
 import ProjectColumn from './components/ProjectColumn'
 import ConversationColumn from './components/ConversationColumn'
@@ -10,6 +11,8 @@ import SettingsPanel from './components/SettingsPanel'
 export type ResultTab = 'dag' | 'artifacts' | 'datasets'
 
 export default function App() {
+  const [authed, setAuthed] = useState(false)
+  const [authChecked, setAuthChecked] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
   const [projectId, setProjectId] = useState<string | null>(null)
   const [detail, setDetail] = useState<ProjectDetail | null>(null)
@@ -23,6 +26,21 @@ export default function App() {
   const [midW, setMidW] = useState(390)
   const resizing = useRef<'left' | 'mid' | null>(null)
   const [dragging, setDragging] = useState<'left' | 'mid' | null>(null)
+
+  useEffect(() => {
+    const token = localStorage.getItem('bioagent_token')
+    if (!token) { setAuthChecked(true); return }
+    api.me().then(() => { setAuthed(true); setAuthChecked(true) })
+      .catch(() => { localStorage.removeItem('bioagent_token'); setAuthChecked(true) })
+  }, [])
+
+  const handleLogin = (token: string) => {
+    localStorage.setItem('bioagent_token', token)
+    setAuthed(true)
+  }
+
+  if (!authChecked) return null
+  if (!authed) return <LoginPage onLogin={handleLogin} />
 
   const startResize = (e: React.MouseEvent, which: 'left' | 'mid') => {
     e.preventDefault()

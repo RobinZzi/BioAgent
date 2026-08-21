@@ -8,10 +8,10 @@ import type {
 const BASE = '/api'
 
 async function req<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(BASE + path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  })
+  const token = localStorage.getItem('bioagent_token')
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  const res = await fetch(BASE + path, { headers, ...options })
   if (!res.ok) {
     let detail = res.statusText
     try {
@@ -24,6 +24,14 @@ async function req<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  // auth
+  register: (username: string, password: string) =>
+    req<{ token: string; username: string; is_admin: boolean }>('/auth/register', { method: 'POST', body: JSON.stringify({ username, password }) }),
+  login: (username: string, password: string) =>
+    req<{ token: string; username: string; is_admin: boolean }>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+  me: () => req<{ username: string; is_admin: boolean }>('/auth/me'),
+  logout: () => localStorage.removeItem('bioagent_token'),
+
   // projects
   listProjects: () => req<Project[]>('/projects'),
   createProject: (body: { name: string; description?: string; data_source?: string; compute_location?: string; workdir?: string; server_id?: string }) =>

@@ -93,13 +93,18 @@ class ArtifactKind(str, enum.Enum):
 class User(Base):
     __tablename__ = "users"
     id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("usr"))
-    name: Mapped[str] = mapped_column(String(120))
+    username: Mapped[str] = mapped_column(String(80), unique=True)
+    password_hash: Mapped[str] = mapped_column(Text, default="")   # pbkdf2: salt$hash
+    is_admin: Mapped[bool] = mapped_column(default=False)
+    token: Mapped[str | None] = mapped_column(String(80), nullable=True)  # 会话 token
+    name: Mapped[str] = mapped_column(String(120), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class Project(Base):
     __tablename__ = "projects"
     id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("proj"))
+    owner_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, default="")
     data_source: Mapped[str] = mapped_column(SAEnum(DataSource), default=DataSource.local)

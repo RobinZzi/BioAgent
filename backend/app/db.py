@@ -44,6 +44,13 @@ def _migrate_missing_columns() -> None:
         "projects": {
             "workdir": "TEXT",
             "server_id": "TEXT",
+            "owner_id": "TEXT",
+        },
+        "users": {
+            "username": "TEXT",
+            "password_hash": "TEXT",
+            "is_admin": "BOOLEAN",
+            "token": "TEXT",
         },
         "environments": {
             "connector_url": "TEXT",

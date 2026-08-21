@@ -11,10 +11,11 @@ from ..capabilities.definitions import CAPABILITIES_BY_ID, get_capability, list_
 from ..db import SessionLocal, get_db
 from ..env.discovery import discover_local
 from ..env.manifest import Manifest
+from ..services.auth import get_current_user
 from ..models import (
     AnalysisEvent, Artifact, ComputeEnvironment, Conversation, Dataset,
     DatasetType, EnvStatus, EnvType, EventStatus, Message, MessageRole,
-    Project, new_id, utcnow,
+    Project, User, new_id, utcnow,
 )
 from ..schemas import (
     ArtifactOut, CapabilityOut, ConversationOut, DagOut, DatasetOut,
@@ -99,10 +100,12 @@ def _event_out(ev: AnalysisEvent, db: Session) -> EventOut:
     )
 
 
-def _get_project(db: Session, project_id: str) -> Project:
+def _get_project(db: Session, project_id: str, user: User | None = None) -> Project:
     p = db.get(Project, project_id)
     if p is None:
         raise HTTPException(404, f"项目不存在: {project_id}")
+    if user is not None and p.owner_id is not None and p.owner_id != user.id:
+        raise HTTPException(403, "无权访问该项目")
     return p
 
 
@@ -127,16 +130,62 @@ def health():
     return {"status": "ok", "app": settings.app_name, "version": settings.version}
 
 
+# ================================================================ Auth
+
+class AuthBody(BaseModel):
+    username: str
+    password: str
+
+
+@router.post("/auth/register")
+def register(body: AuthBody, db: Session = Depends(get_db)):
+    from ..services.auth import hash_password, new_token
+    if db.query(User).filter(User.username == body.username).first():
+        raise HTTPException(400, "用户名已存在")
+    is_first = db.query(User).count() == 0
+    user = User(id=new_id("usr"), username=body.username,
+                password_hash=hash_password(body.password),
+                name=body.username, is_admin=is_first)
+    db.add(user)
+    db.flush()
+    if is_first:
+        # 首个用户接管所有未归属项目
+        db.query(Project).filter(Project.owner_id.is_(None)).update({Project.owner_id: user.id})
+    user.token = new_token()
+    db.commit()
+    db.refresh(user)
+    return {"token": user.token, "username": user.username, "is_admin": user.is_admin}
+
+
+@router.post("/auth/login")
+def login(body: AuthBody, db: Session = Depends(get_db)):
+    from ..services.auth import new_token, verify_password
+    user = db.query(User).filter(User.username == body.username).first()
+    if not user or not verify_password(body.password, user.password_hash):
+        raise HTTPException(401, "用户名或密码错误")
+    user.token = new_token()
+    db.commit()
+    return {"token": user.token, "username": user.username, "is_admin": user.is_admin}
+
+
+@router.get("/auth/me")
+def me(user: User = Depends(get_current_user)):
+    return {"username": user.username, "is_admin": user.is_admin}
+
+
 # ================================================================ Projects
 
 @router.get("/projects", response_model=list[ProjectOut])
-def list_projects(db: Session = Depends(get_db)):
-    projects = db.query(Project).order_by(Project.created_at.desc()).all()
+def list_projects(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    projects = (db.query(Project)
+                .filter(Project.owner_id == user.id)
+                .order_by(Project.created_at.desc()).all())
     return [_project_out(p, db) for p in projects]
 
 
 @router.post("/projects", response_model=ProjectOut, status_code=201)
-def create_project(body: ProjectCreate, db: Session = Depends(get_db)):
+def create_project(body: ProjectCreate, db: Session = Depends(get_db),
+                   user: User = Depends(get_current_user)):
     workdir = body.workdir.strip() or None
     server_id = body.server_id.strip() or None
     # 本地项目工作区：确保目录存在（可创建）
@@ -145,7 +194,7 @@ def create_project(body: ProjectCreate, db: Session = Depends(get_db)):
             Path(workdir).mkdir(parents=True, exist_ok=True)
         except OSError as e:
             raise HTTPException(400, f"无法创建工作区目录: {e}")
-    p = Project(id=new_id("proj"), name=body.name, description=body.description,
+    p = Project(id=new_id("proj"), owner_id=user.id, name=body.name, description=body.description,
                 data_source=body.data_source, compute_location=body.compute_location,
                 workdir=workdir, server_id=server_id)
     db.add(p)
@@ -160,9 +209,10 @@ class ProjectPatch(BaseModel):
 
 
 @router.patch("/projects/{project_id}", response_model=ProjectOut)
-def patch_project(project_id: str, body: ProjectPatch, db: Session = Depends(get_db)):
+def patch_project(project_id: str, body: ProjectPatch, db: Session = Depends(get_db),
+                  user: User = Depends(get_current_user)):
     """重命名项目 / 重定位工作区。"""
-    p = _get_project(db, project_id)
+    p = _get_project(db, project_id, user)
     if body.name is not None:
         if not body.name.strip():
             raise HTTPException(400, "项目名不能为空")
@@ -206,7 +256,8 @@ class BatchDeleteBody(BaseModel):
 
 
 @router.post("/projects/batch-delete")
-def batch_delete_projects(body: BatchDeleteBody, db: Session = Depends(get_db)):
+def batch_delete_projects(body: BatchDeleteBody, db: Session = Depends(get_db),
+                          user: User = Depends(get_current_user)):
     """批量删除项目。delete_files=True 时连带删除项目目录（log/图片/产物）；
     False 时仅删除数据库记录，文件保留。"""
     import shutil
@@ -214,6 +265,8 @@ def batch_delete_projects(body: BatchDeleteBody, db: Session = Depends(get_db)):
     deleted = []
     for pid in body.project_ids:
         p = db.get(Project, pid)
+        if p is None or p.owner_id != user.id:
+            continue
         if p is None:
             continue
         pdir = project_dir(pid)
@@ -226,8 +279,9 @@ def batch_delete_projects(body: BatchDeleteBody, db: Session = Depends(get_db)):
 
 
 @router.get("/projects/{project_id}", response_model=ProjectDetail)
-def project_detail(project_id: str, db: Session = Depends(get_db)):
-    p = _get_project(db, project_id)
+def project_detail(project_id: str, db: Session = Depends(get_db),
+                   user: User = Depends(get_current_user)):
+    p = _get_project(db, project_id, user)
     convs = db.query(Conversation).filter(Conversation.project_id == project_id).all()
     dss = db.query(Dataset).filter(Dataset.project_id == project_id).order_by(
         Dataset.created_at.asc()).all()
