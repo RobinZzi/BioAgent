@@ -43,38 +43,51 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   -webkit-font-smoothing: antialiased;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 13.5px;
+  line-height: 1.55;
 }
 
 ::selection { background: var(--accent-soft); }
 
-/* ---------------- 基础控件 ---------------- */
+/* ---------------- 基础控件（统一按钮风格）---------------- */
 button {
   background: var(--panel);
   color: var(--text);
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  padding: 5px 12px;
+  border-radius: 8px;
+  padding: 6px 14px;
   font-size: 12.5px;
   font-weight: 500;
+  line-height: 1.4;
   cursor: pointer;
-  transition: background .12s, border-color .12s, box-shadow .12s, color .12s;
+  transition: background .12s, border-color .12s, box-shadow .12s, color .12s, transform .12s;
   white-space: nowrap;
   box-shadow: var(--shadow-xs);
+  font-family: inherit;
 }
 button:hover { background: var(--panel-alt); border-color: var(--border-strong); }
 button:active { transform: translateY(1px); }
 button:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
 button.primary {
   background: var(--accent-grad);
-  border-color: transparent;
+  border: 1px solid transparent;
   color: #fff;
-  box-shadow: 0 1px 2px rgba(79,70,229,.25);
+  box-shadow: 0 1px 3px rgba(79,70,229,.3);
 }
-button.primary:hover { background: var(--accent-grad); box-shadow: 0 3px 10px rgba(79,70,229,.3); filter: brightness(1.05); }
-button.ghost { border-color: transparent; background: transparent; box-shadow: none; }
-button.ghost:hover { background: var(--gray-soft); }
+button.primary:hover { background: var(--accent-grad); border-color: transparent; box-shadow: 0 3px 10px rgba(79,70,229,.35); filter: brightness(1.05); }
+button.ghost {
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+  padding: 6px 12px;
+  color: var(--text-dim);
+}
+button.ghost:hover { background: var(--gray-soft); border-color: var(--border); color: var(--text); }
+button.danger { color: var(--red); border-color: var(--red); background: transparent; }
+button.danger:hover { background: var(--red-soft); }
+button.primary.danger { background: linear-gradient(135deg, #ef4444, #dc2626); border-color: transparent; color: #fff; }
+button.primary.danger:hover { background: linear-gradient(135deg, #ef4444, #dc2626); }
+button.sm { padding: 4px 10px; font-size: 11.5px; }
 
 input, select, textarea {
   background: var(--panel);
@@ -112,7 +125,7 @@ a:hover { text-decoration: underline; }
 .badge.gray { background: var(--gray-soft); color: var(--gray); }
 .badge.blue { background: var(--accent-soft); color: var(--accent); }
 
-.muted { color: var(--text-dim); font-size: 12px; }
+.muted { color: var(--text-dim); font-size: 12.5px; }
 .mono { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 11.5px; }
 .spacer { flex: 1; }
 .empty { color: var(--text-faint); text-align: center; padding: 40px 16px; font-size: 12.5px; line-height: 1.7; }
@@ -151,18 +164,40 @@ a:hover { text-decoration: underline; }
 
 .columns {
   flex: 1;
-  display: grid;
-  grid-template-columns: 256px 400px 1fr;
+  display: flex;
   min-height: 0;
 }
+
+.col-wrap { display: flex; min-height: 0; flex-direction: column; }
+.col-wrap.fixed { flex: none; }
+.col-wrap.main { flex: 1; min-width: 320px; }
 
 .col {
   min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-width: 0;
 }
 .col + .col { border-left: 1px solid var(--border); }
+
+/* 列宽拖拽分隔条 */
+.resizer {
+  flex: none;
+  width: 5px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 10;
+  transition: background .12s;
+}
+.resizer:hover, .resizer.dragging { background: var(--accent-soft); }
+.resizer::after {
+  content: ''; position: absolute; inset: 0 1px; width: 3px; margin: 0 auto;
+  background: var(--border); transition: background .12s;
+}
+.resizer:hover::after, .resizer.dragging::after { background: var(--accent); }
 
 .col-header {
   flex: none;
@@ -210,7 +245,7 @@ a:hover { text-decoration: underline; }
   max-width: 94%;
   padding: 9px 13px;
   border-radius: 12px;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;

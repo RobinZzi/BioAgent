@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from './api'
 import type { ConversationDetail, Project, ProjectDetail, Settings } from './types'
 import TopBar from './components/TopBar'
@@ -19,6 +19,32 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [tab, setTab] = useState<ResultTab>('dag')
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const [leftW, setLeftW] = useState(250)
+  const [midW, setMidW] = useState(390)
+  const resizing = useRef<'left' | 'mid' | null>(null)
+  const [dragging, setDragging] = useState<'left' | 'mid' | null>(null)
+
+  const startResize = (e: React.MouseEvent, which: 'left' | 'mid') => {
+    e.preventDefault()
+    resizing.current = which
+    setDragging(which)
+    const startX = e.clientX
+    const startLeft = leftW
+    const startMid = midW
+    const onMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX
+      if (resizing.current === 'left') setLeftW(Math.max(180, Math.min(500, startLeft + dx)))
+      else setMidW(Math.max(280, Math.min(600, startMid + dx)))
+    }
+    const onUp = () => {
+      resizing.current = null
+      setDragging(null)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
 
   const refreshProjects = useCallback(() => {
     api.listProjects().then(setProjects).catch(console.error)
@@ -123,33 +149,41 @@ export default function App() {
         onRefresh={refreshDetail}
       />
 
-      <div className="columns">
-        <ProjectColumn
-          projects={projects}
-          currentId={projectId}
-          onSelect={setProjectId}
-          onCreate={createProject}
-          onDelete={deleteProjects}
-          onRefresh={refreshProjects}
-        />
+      <div className="columns" style={{ userSelect: dragging ? 'none' : undefined }}>
+        <div className="col-wrap fixed" style={{ width: leftW }}>
+          <ProjectColumn
+            projects={projects}
+            currentId={projectId}
+            onSelect={setProjectId}
+            onCreate={createProject}
+            onDelete={deleteProjects}
+            onRefresh={refreshProjects}
+          />
+        </div>
+        <div className={`resizer ${dragging === 'left' ? 'dragging' : ''}`} onMouseDown={(e) => startResize(e, 'left')} />
 
-        <ConversationColumn
-          convId={convObj?.id}
-          messages={conv?.messages ?? []}
-          busy={busy}
-          onSendStart={() => setBusy(true)}
-          onRefresh={refreshDetail}
-        />
+        <div className="col-wrap fixed" style={{ width: midW }}>
+          <ConversationColumn
+            convId={convObj?.id}
+            messages={conv?.messages ?? []}
+            busy={busy}
+            onSendStart={() => setBusy(true)}
+            onRefresh={refreshDetail}
+          />
+        </div>
+        <div className={`resizer ${dragging === 'mid' ? 'dragging' : ''}`} onMouseDown={(e) => startResize(e, 'mid')} />
 
-        <ResultColumn
-          detail={detail}
-          convId={convObj?.id}
-          tab={tab}
-          setTab={setTab}
-          selectedEventId={selectedEventId}
-          setSelectedEventId={setSelectedEventId}
-          onRefresh={refreshDetail}
-        />
+        <div className="col-wrap main">
+          <ResultColumn
+            detail={detail}
+            convId={convObj?.id}
+            tab={tab}
+            setTab={setTab}
+            selectedEventId={selectedEventId}
+            setSelectedEventId={setSelectedEventId}
+            onRefresh={refreshDetail}
+          />
+        </div>
       </div>
 
       {showSettings && (
