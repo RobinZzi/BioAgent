@@ -39,9 +39,6 @@ export default function App() {
     setAuthed(true)
   }
 
-  if (!authChecked) return null
-  if (!authed) return <LoginPage onLogin={handleLogin} />
-
   const startResize = (e: React.MouseEvent, which: 'left' | 'mid') => {
     e.preventDefault()
     resizing.current = which
@@ -154,6 +151,10 @@ export default function App() {
   }
 
   const convObj = conv?.conversation ?? detail?.conversations[0]
+
+  // 认证门控（置于所有 hooks 之后，保证 hook 调用次数一致）
+  if (!authChecked) return null
+  if (!authed) return <LoginPage onLogin={handleLogin} />
 
   return (
     <div className="app">
