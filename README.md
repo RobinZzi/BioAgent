@@ -23,21 +23,21 @@
 
 ## 项目亮点 / Highlights
 
-- **自然语言分析**：Agent 理解「帮我聚类」「做完整分析」等意图，自动补全前置步骤
-- **多用户可选**：默认单机免登录，认证可选（共享/部署）
-- **Tool ≠ Capability**：32 个语言无关分析能力，scanpy / Seurat / DESeq2 / edgeR / STAR / cellranger 等多实现，覆盖 scRNA / Bulk / scATAC / 空间 / 甲基化 / WES-WGS
-- **真实计算环境**：本地 venv / Conda / R / Slurm / 远程 Connector（Agent 不持有 SSH 凭据）
-- **可追溯可复现**：Analysis Event + Artifact + 分析 DAG + 数据集不可变版本链
-- **LLM Agent**：OpenAI 兼容（默认 DeepSeek），失败自动回退规则引擎
-- **一键标准分析 / 可复现 / 错误恢复 / 异常检测 / 报告生成**：完整科研闭环
-- **异步状态机**：queued → running → succeeded/failed/cancelled，mock/本地/远程三级执行
+- **自然语言分析** / Natural language analysis：Agent 理解「帮我聚类」「做完整分析」等意图，自动补全前置步骤 / understands "cluster this data" / "run full analysis" and auto-fills prerequisites
+- **多用户可选** / Optional multi-user：默认单机免登录，认证可选（共享/部署）/ standalone (no login) by default; optional auth for shared/hosted deployments
+- **Tool ≠ Capability**：32 个语言无关分析能力，scanpy / Seurat / DESeq2 / edgeR / STAR / cellranger 等多实现，覆盖 scRNA / Bulk / scATAC / 空间 / 甲基化 / WES-WGS / 32 language-agnostic capabilities with multiple implementations (scanpy / Seurat / DESeq2 / edgeR / STAR / cellranger) covering scRNA / Bulk / scATAC / spatial / methylation / WES-WGS
+- **真实计算环境** / Real compute environments：本地 venv / Conda / R / Slurm / 远程 Connector（Agent 不持有 SSH 凭据）/ local venv / Conda / R / Slurm / remote Connector (Agent never holds SSH credentials)
+- **可追溯可复现** / Traceable & reproducible：Analysis Event + Artifact + 分析 DAG + 数据集不可变版本链 / Analysis Event + Artifact + analysis DAG + immutable dataset version chain
+- **LLM Agent**：OpenAI 兼容（默认 DeepSeek），失败自动回退规则引擎 / OpenAI-compatible (DeepSeek by default), falls back to the rule engine on failure
+- **一键标准分析 / 可复现 / 错误恢复 / 异常检测 / 报告生成** / One-click standard analysis / reproducibility / error recovery / anomaly detection / report generation：完整科研闭环 / complete research loop
+- **异步状态机** / Async state machine：queued → running → succeeded/failed/cancelled，mock/本地/远程三级执行 / mock / local / remote execution
 
 ## 快速体验 / Quick Start
 
 ```bash
-bash scripts/dev.sh setup    # 初始化环境（首次）
-bash scripts/dev.sh start    # 启动后端 :8000 + 前端 :5173
-# 打开 http://localhost:5173
+bash scripts/dev.sh setup    # 初始化环境（首次）/ initialize environments (first time)
+bash scripts/dev.sh start    # 启动后端 :8000 + 前端 :5173 / start backend :8000 + frontend :5173
+# 打开 http://localhost:5173 / open http://localhost:5173
 ```
 
 详细文档见 <a href="README.zh.md">中文版</a> / <a href="README.en.md">English</a>；
