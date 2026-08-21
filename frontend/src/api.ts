@@ -26,8 +26,12 @@ async function req<T>(path: string, options?: RequestInit): Promise<T> {
 export const api = {
   // projects
   listProjects: () => req<Project[]>('/projects'),
-  createProject: (body: { name: string; description?: string; data_source?: string; compute_location?: string }) =>
+  createProject: (body: { name: string; description?: string; data_source?: string; compute_location?: string; workdir?: string; server_id?: string }) =>
     req<Project>('/projects', { method: 'POST', body: JSON.stringify(body) }),
+  patchProject: (id: string, body: { name?: string; workdir?: string }) =>
+    req<Project>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  fsList: (path: string) => req<{ path: string; parent: string; dirs: string[] }>(`/fs/list?path=${encodeURIComponent(path)}`),
+  servers: () => req<Environment[]>('/servers'),
   batchDeleteProjects: (projectIds: string[], deleteFiles: boolean) =>
     req<{ deleted: string[]; deleted_files: boolean }>('/projects/batch-delete', {
       method: 'POST', body: JSON.stringify({ project_ids: projectIds, delete_files: deleteFiles }),
@@ -55,8 +59,12 @@ export const api = {
     req<Environment>(`/environments/${envId}/rediscover`, { method: 'POST' }),
   registerRemoteEnvironment: (projectId: string, body: { name: string; connector_url: string; token: string }) =>
     req<Environment>(`/projects/${projectId}/environments/register-remote`, { method: 'POST', body: JSON.stringify(body) }),
+  registerRemoteGlobal: (body: { name: string; connector_url: string; token: string }) =>
+    req<Environment>('/environments/register-remote', { method: 'POST', body: JSON.stringify(body) }),
   registerSSHEnvironment: (projectId: string, body: { name: string; host: string; port: number; user: string; password: string; key_path: string }) =>
     req<Environment>(`/projects/${projectId}/environments/register-ssh`, { method: 'POST', body: JSON.stringify(body) }),
+  registerSSHGlobal: (body: { name: string; host: string; port: number; user: string; password: string; key_path: string }) =>
+    req<Environment>('/environments/register-ssh', { method: 'POST', body: JSON.stringify(body) }),
   testEnvironment: (envId: string) =>
     req<{ ok: boolean; detail: string; env_type: string }>(`/environments/${envId}/test`, { method: 'POST' }),
   setConversationEnvironment: (convId: string, environmentId: string) =>

@@ -15,8 +15,10 @@ class Msg(BaseModel):
 class ProjectCreate(BaseModel):
     name: str
     description: str = ""
-    data_source: str = "local"      # local / remote
+    data_source: str = "local"      # local / remote（本地项目 / 服务器端项目）
     compute_location: str = "local"  # local / remote
+    workdir: str = ""               # 工作区路径（本地绝对路径 / 服务器目录名）
+    server_id: str = ""             # 服务器端项目关联的服务器环境
 
 
 class ProjectOut(BaseModel):
@@ -25,6 +27,8 @@ class ProjectOut(BaseModel):
     description: str = ""
     data_source: str
     compute_location: str
+    workdir: str | None = None
+    server_id: str | None = None
     created_at: datetime | None = None
     n_conversations: int = 0
     n_datasets: int = 0

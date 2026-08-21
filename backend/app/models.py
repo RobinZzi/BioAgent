@@ -104,6 +104,8 @@ class Project(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     data_source: Mapped[str] = mapped_column(SAEnum(DataSource), default=DataSource.local)
     compute_location: Mapped[str] = mapped_column(SAEnum(ComputeLocation), default=ComputeLocation.local)
+    workdir: Mapped[str | None] = mapped_column(Text, nullable=True)   # 工作区路径（本地绝对路径 / 服务器目录名）
+    server_id: Mapped[str | None] = mapped_column(String(40), nullable=True)  # 关联服务器环境
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="project", cascade="all, delete-orphan")

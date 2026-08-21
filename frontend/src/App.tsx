@@ -77,8 +77,11 @@ export default function App() {
     return () => window.clearInterval(timer)
   }, [busy, projectId, refreshDetail])
 
-  const createProject = async (name: string, dataSource: string, computeLocation: string) => {
-    const p = await api.createProject({ name, data_source: dataSource, compute_location: computeLocation })
+  const createProject = async (name: string, category: 'local' | 'remote', workdir: string, serverId: string) => {
+    const p = await api.createProject({
+      name, data_source: category, compute_location: category,
+      workdir, server_id: serverId,
+    })
     await api.createConversation(p.id)
     refreshProjects()
     setProjectId(p.id)
@@ -127,6 +130,7 @@ export default function App() {
           onSelect={setProjectId}
           onCreate={createProject}
           onDelete={deleteProjects}
+          onRefresh={refreshProjects}
         />
 
         <ConversationColumn

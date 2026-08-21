@@ -6,6 +6,8 @@ export interface Project {
   description: string
   data_source: string
   compute_location: string
+  workdir: string | null
+  server_id: string | null
   created_at: string | null
   n_conversations: number
   n_datasets: number

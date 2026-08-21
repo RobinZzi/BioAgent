@@ -363,3 +363,26 @@ pre.logs {
 button.danger { color: var(--red); border-color: var(--red); }
 button.danger:hover { background: var(--red-soft); }
 button.primary.danger { background: linear-gradient(135deg, #ef4444, #dc2626); border-color: transparent; color: #fff; }
+
+/* 项目分组 */
+.group-header {
+  padding: 10px 14px 4px; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint);
+}
+
+/* 目录浏览 */
+.dir-picker {
+  margin-top: 8px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 8px; background: var(--panel-soft); max-height: 220px; display: flex; flex-direction: column;
+}
+.dir-list { flex: 1; overflow-y: auto; }
+.dir-item {
+  display: flex; align-items: center; gap: 6px; padding: 5px 8px;
+  border-radius: 4px; cursor: pointer; font-size: 12px;
+}
+.dir-item:hover { background: var(--gray-soft); }
+.dir-icon {
+  width: 12px; height: 10px; border: 1.5px solid var(--accent); border-radius: 2px;
+  background: var(--accent-soft); position: relative; flex: none;
+}
+.dir-icon::before { content:''; position:absolute; left:-3px; top:-4px; width:8px; height:3px; border:1.5px solid var(--accent); border-bottom:none; border-radius:2px 2px 0 0; }

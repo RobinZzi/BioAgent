@@ -41,6 +41,10 @@ def _migrate_missing_columns() -> None:
     import sqlalchemy as sa
 
     additions = {
+        "projects": {
+            "workdir": "TEXT",
+            "server_id": "TEXT",
+        },
         "environments": {
             "connector_url": "TEXT",
             "connector_token": "TEXT",

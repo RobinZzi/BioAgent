@@ -1,30 +1,28 @@
 import { useState } from 'react'
+import { api } from '../api'
 import type { Project } from '../types'
+import NewProjectModal from './NewProjectModal'
+
+const DTYPE_LABEL: Record<string, string> = { local: '本地', remote: '服务器' }
 
 export default function ProjectColumn({
-  projects, currentId, onSelect, onCreate, onDelete,
+  projects, currentId, onSelect, onCreate, onDelete, onRefresh,
 }: {
   projects: Project[]
   currentId: string | null
   onSelect: (id: string) => void
-  onCreate: (name: string, dataSource: string, computeLocation: string) => void
+  onCreate: (name: string, category: 'local' | 'remote', workdir: string, serverId: string) => void
   onDelete: (ids: string[], deleteFiles: boolean) => void
+  onRefresh: () => void
 }) {
-  const [showForm, setShowForm] = useState(false)
+  const [showModal, setShowModal] = useState(false)
   const [manage, setManage] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [deleteFiles, setDeleteFiles] = useState(true)
-  const [name, setName] = useState('')
-  const [dataSource, setDataSource] = useState('local')
-  const [computeLocation, setComputeLocation] = useState('local')
 
-  const submit = () => {
-    if (!name.trim()) return
-    onCreate(name.trim(), dataSource, computeLocation)
-    setName('')
-    setShowForm(false)
-  }
+  const local = projects.filter((p) => p.data_source === 'local')
+  const remote = projects.filter((p) => p.data_source === 'remote')
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
@@ -41,6 +39,51 @@ export default function ProjectColumn({
     exitManage()
   }
 
+  const rename = async (p: Project) => {
+    const name = window.prompt('重命名项目', p.name)
+    if (!name || name.trim() === p.name) return
+    try {
+      await api.patchProject(p.id, { name: name.trim() })
+      onRefresh()
+    } catch (e) { alert((e as Error).message) }
+  }
+
+  const reposition = async (p: Project) => {
+    const wd = window.prompt('重定位工作区（本地绝对路径 / 服务器目录名）', p.workdir ?? '')
+    if (wd === null) return
+    try {
+      await api.patchProject(p.id, { workdir: wd.trim() })
+      onRefresh()
+    } catch (e) { alert((e as Error).message) }
+  }
+
+  const renderItem = (p: Project) => (
+    <div key={p.id}
+         className={`project-item ${p.id === currentId ? 'active' : ''} ${selected.includes(p.id) ? 'selected' : ''}`}
+         onClick={() => manage ? toggleSelect(p.id) : onSelect(p.id)}>
+      <div className="name">
+        {manage && (
+          <input type="checkbox" style={{ marginRight: 8 }}
+                 checked={selected.includes(p.id)}
+                 onChange={() => toggleSelect(p.id)}
+                 onClick={(e) => e.stopPropagation()} />
+        )}
+        {p.name}
+      </div>
+      <div className="meta">
+        <span className="badge gray">{DTYPE_LABEL[p.data_source] ?? p.data_source}</span>
+        {p.n_datasets} 数据集 · {p.n_events} 事件
+        {p.workdir && <span className="mono muted" style={{ display: 'block', marginTop: 2 }}>{p.workdir}</span>}
+      </div>
+      {manage && selected.includes(p.id) && selected.length === 1 && (
+        <div className="actions" style={{ marginTop: 6, display: 'flex', gap: 6 }}>
+          <button className="ghost" style={{ fontSize: 11 }} onClick={(e) => { e.stopPropagation(); rename(p) }}>重命名</button>
+          <button className="ghost" style={{ fontSize: 11 }} onClick={(e) => { e.stopPropagation(); reposition(p) }}>重定位</button>
+        </div>
+      )}
+    </div>
+  )
+
   return (
     <div className="col">
       <div className="col-header">
@@ -51,70 +94,40 @@ export default function ProjectColumn({
             <span className="muted">已选 {selected.length}</span>
             <button className="danger" style={{ padding: '2px 8px', fontSize: 12 }}
                     disabled={selected.length === 0}
-                    onClick={() => setConfirmOpen(true)}>
-              删除
-            </button>
-            <button className="ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={exitManage}>
-              取消
-            </button>
+                    onClick={() => setConfirmOpen(true)}>删除</button>
+            <button className="ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={exitManage}>取消</button>
           </>
         ) : (
           <>
             <button className="ghost" style={{ padding: '2px 8px', fontSize: 12 }}
-                    onClick={() => setShowForm(!showForm)}>
-              {showForm ? '取消' : '新建'}
-            </button>
+                    onClick={() => setShowModal(true)}>新建</button>
             <button className="ghost" style={{ padding: '2px 8px', fontSize: 12 }}
-                    onClick={() => setManage(true)}>
-              管理
-            </button>
+                    onClick={() => setManage(true)}>管理</button>
           </>
         )}
       </div>
 
       <div className="col-body">
-        {showForm && !manage && (
-          <div className="new-project">
-            <input placeholder="项目名称" value={name}
-                   onChange={(e) => setName(e.target.value)} autoFocus />
-            <div className="row">
-              <select value={dataSource} onChange={(e) => setDataSource(e.target.value)}>
-                <option value="local">数据 · 本地</option>
-                <option value="remote">数据 · 远程</option>
-              </select>
-              <select value={computeLocation} onChange={(e) => setComputeLocation(e.target.value)}>
-                <option value="local">计算 · 本地</option>
-                <option value="remote">计算 · 远程/HPC</option>
-              </select>
-            </div>
-            <button className="primary" style={{ width: '100%' }} onClick={submit}>创建项目</button>
-          </div>
+        {local.length > 0 && (
+          <div className="group-header">本地项目</div>
         )}
-
-        <div className="project-list">
-          {projects.map((p) => (
-            <div key={p.id}
-                 className={`project-item ${p.id === currentId ? 'active' : ''} ${selected.includes(p.id) ? 'selected' : ''}`}
-                 onClick={() => manage ? toggleSelect(p.id) : onSelect(p.id)}>
-              <div className="name">
-                {manage && (
-                  <input type="checkbox" style={{ marginRight: 8 }}
-                         checked={selected.includes(p.id)}
-                         onChange={() => toggleSelect(p.id)}
-                         onClick={(e) => e.stopPropagation()} />
-                )}
-                {p.name}
-              </div>
-              <div className="meta">
-                {p.n_datasets} 数据集 · {p.n_events} 事件
-              </div>
-            </div>
-          ))}
-          {projects.length === 0 && (
-            <div className="empty">暂无项目，点击「新建」创建。</div>
-          )}
-        </div>
+        <div className="project-list">{local.map(renderItem)}</div>
+        {remote.length > 0 && (
+          <div className="group-header">服务器端项目</div>
+        )}
+        <div className="project-list">{remote.map(renderItem)}</div>
+        {projects.length === 0 && (
+          <div className="empty">暂无项目，点击「新建」创建。</div>
+        )}
       </div>
+
+      {showModal && (
+        <NewProjectModal
+          onClose={() => setShowModal(false)}
+          onCreate={(name, cat, wd, sid) => { onCreate(name, cat, wd, sid); setShowModal(false) }}
+          onAddServer={() => {}}
+        />
+      )}
 
       {confirmOpen && (
         <div className="settings-overlay" onClick={() => setConfirmOpen(false)}>

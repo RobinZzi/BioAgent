@@ -38,6 +38,7 @@ def _project_out(p: Project, db: Session) -> ProjectOut:
         id=p.id, name=p.name, description=p.description,
         data_source=p.data_source.value if hasattr(p.data_source, "value") else p.data_source,
         compute_location=p.compute_location.value if hasattr(p.compute_location, "value") else p.compute_location,
+        workdir=p.workdir, server_id=p.server_id,
         created_at=p.created_at,
         n_conversations=len(p.conversations),
         n_datasets=len(p.datasets),
@@ -136,12 +137,67 @@ def list_projects(db: Session = Depends(get_db)):
 
 @router.post("/projects", response_model=ProjectOut, status_code=201)
 def create_project(body: ProjectCreate, db: Session = Depends(get_db)):
+    workdir = body.workdir.strip() or None
+    server_id = body.server_id.strip() or None
+    # 本地项目工作区：确保目录存在（可创建）
+    if body.data_source == "local" and workdir:
+        try:
+            Path(workdir).mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            raise HTTPException(400, f"无法创建工作区目录: {e}")
     p = Project(id=new_id("proj"), name=body.name, description=body.description,
-                data_source=body.data_source, compute_location=body.compute_location)
+                data_source=body.data_source, compute_location=body.compute_location,
+                workdir=workdir, server_id=server_id)
     db.add(p)
     db.commit()
     db.refresh(p)
     return _project_out(p, db)
+
+
+class ProjectPatch(BaseModel):
+    name: str | None = None
+    workdir: str | None = None   # 重定位工作区（本地绝对路径 / 服务器目录名）
+
+
+@router.patch("/projects/{project_id}", response_model=ProjectOut)
+def patch_project(project_id: str, body: ProjectPatch, db: Session = Depends(get_db)):
+    """重命名项目 / 重定位工作区。"""
+    p = _get_project(db, project_id)
+    if body.name is not None:
+        if not body.name.strip():
+            raise HTTPException(400, "项目名不能为空")
+        p.name = body.name.strip()
+    if body.workdir is not None:
+        wd = body.workdir.strip()
+        if p.data_source == "local" and wd:
+            try:
+                Path(wd).mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                raise HTTPException(400, f"无法创建工作区目录: {e}")
+        p.workdir = wd or None
+    db.commit()
+    db.refresh(p)
+    return _project_out(p, db)
+
+
+@router.get("/fs/list")
+def fs_list(path: str = "/", db: Session = Depends(get_db)):
+    """目录浏览（用于本地项目工作区选择）。"""
+    import os
+    base = Path(path).expanduser()
+    if not base.is_dir():
+        return {"path": str(base), "parent": str(base.parent), "dirs": []}
+    dirs = []
+    try:
+        for entry in sorted(base.iterdir()):
+            try:
+                if entry.is_dir() and not entry.name.startswith("."):
+                    dirs.append(entry.name)
+            except OSError:
+                continue
+    except OSError:
+        pass
+    return {"path": str(base), "parent": str(base.parent), "dirs": dirs}
 
 
 class BatchDeleteBody(BaseModel):
@@ -323,6 +379,15 @@ def list_environments(project_id: str, db: Session = Depends(get_db)):
     return [_env_out(e) for e in envs]
 
 
+@router.get("/servers", response_model=list[EnvironmentOut])
+def list_servers(db: Session = Depends(get_db)):
+    """所有已链接的远程服务器环境（新建项目时选择）。"""
+    envs = (db.query(ComputeEnvironment)
+            .filter(ComputeEnvironment.env_type == EnvType.remote)
+            .order_by(ComputeEnvironment.discovered_at.desc()).all())
+    return [_env_out(e) for e in envs]
+
+
 @router.post("/environments/{env_id}/rediscover", response_model=EnvironmentOut)
 def rediscover_environment(env_id: str, db: Session = Depends(get_db)):
     env = db.get(ComputeEnvironment, env_id)
@@ -373,6 +438,46 @@ def register_ssh_environment(project_id: str, body: RegisterSSHBody,
                                       body.password, body.key_path)
     env = ComputeEnvironment(
         id=new_id("env"), project_id=p.id, name=body.name, env_type=EnvType.remote,
+        ssh_host=body.host, ssh_port=body.port, ssh_user=body.user,
+        ssh_password=encrypt(body.password) if body.password else None,
+        ssh_key_path=body.key_path or None,
+        manifest=manifest or {},
+        status=EnvStatus.healthy if ok else EnvStatus.unreachable,
+        discovered_at=utcnow())
+    db.add(env)
+    db.commit()
+    db.refresh(env)
+    return _env_out(env)
+
+
+@router.post("/environments/register-remote", response_model=EnvironmentOut)
+def register_remote_global(body: RegisterRemoteBody, db: Session = Depends(get_db)):
+    """注册全局 Connector（新建项目时添加服务器，无需项目）。"""
+    from ..executor.remote import LocalConnectorExecutor
+    probe = LocalConnectorExecutor(Path("."), body.connector_url, body.token)
+    manifest_dict, err = probe.discover()
+    if err or manifest_dict is None:
+        raise HTTPException(400, f"无法连接 Connector ({body.connector_url}): {err}")
+    env = ComputeEnvironment(
+        id=new_id("env"), project_id=None, name=body.name, env_type=EnvType.remote,
+        manifest=manifest_dict,
+        status=EnvStatus.healthy if manifest_dict.get("runtimes") else EnvStatus.degraded,
+        connector_url=body.connector_url, connector_token=body.token,
+        discovered_at=utcnow())
+    db.add(env)
+    db.commit()
+    db.refresh(env)
+    return _env_out(env)
+
+
+@router.post("/environments/register-ssh", response_model=EnvironmentOut)
+def register_ssh_global(body: RegisterSSHBody, db: Session = Depends(get_db)):
+    """注册全局 SSH 服务器（新建项目时添加服务器，无需项目）。"""
+    from ..utils.crypto import encrypt
+    ok, detail, manifest = _ssh_probe(body.host, body.port, body.user,
+                                      body.password, body.key_path)
+    env = ComputeEnvironment(
+        id=new_id("env"), project_id=None, name=body.name, env_type=EnvType.remote,
         ssh_host=body.host, ssh_port=body.port, ssh_user=body.user,
         ssh_password=encrypt(body.password) if body.password else None,
         ssh_key_path=body.key_path or None,
