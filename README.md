@@ -5,7 +5,7 @@
   <a href="README.en.md"><img src="https://img.shields.io/badge/English-README-blue?style=for-the-badge" alt="English"></a>
 </p>
 
-# 🧬 BioAgent · 生信分析 Agent 工作平台
+# BioAgent · 生信分析 Agent 工作平台
 
 > 让用户通过自然语言，与一个能够理解生物信息学分析流程、调用真实计算环境、
 > 执行分析并记录全过程的 AI Agent 协作完成科研分析。
@@ -14,14 +14,14 @@
 > bioinformatics workflows, drives real compute environments, executes analyses,
 > and records the full process.
 
-## 🌏 选择语言 / Choose Language
+## 选择语言 / Choose Language
 
 | | |
 |---|---|
-| <a href="README.zh.md"><b>🇨🇳 中文版</b></a> | 完整中文文档：快速开始、架构、API、安全模型 |
-| <a href="README.en.md"><b>🇬🇧 English</b></a> | Full English docs: quick start, architecture, API, security model |
+| <a href="README.zh.md"><b>中文版</b></a> | 完整中文文档：快速开始、架构、API、安全模型 |
+| <a href="README.en.md"><b>English</b></a> | Full English docs: quick start, architecture, API, security model |
 
-## ✨ 项目亮点 / Highlights
+## 项目亮点 / Highlights
 
 - **自然语言分析**：Agent 理解「帮我聚类」「做完整分析」等意图，自动补全前置步骤
 - **多用户可选**：默认单机免登录，认证可选（共享/部署）
