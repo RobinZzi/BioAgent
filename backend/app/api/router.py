@@ -19,10 +19,10 @@ from ..models import (
 )
 from ..schemas import (
     ArtifactOut, CapabilityOut, ConversationOut, DagOut, DatasetOut,
-    DatasetRegister, EnvironmentOut, EventOut, IntentRequest, IntentResponse,
-    MessageOut, MessageResult, MessageSend, ProjectCreate, ProjectDetail,
-    ProjectOut, RegisterRemoteBody, RegisterSSHBody, RerunBody, ResolveOut,
-    SetEnvironmentBody,
+    DatasetPatch, DatasetRegister, EnvironmentOut, EventOut, IntentRequest,
+    IntentResponse, MessageOut, MessageResult, MessageSend, ProjectCreate,
+    ProjectDetail, ProjectOut, RegisterRemoteBody, RegisterSSHBody, RerunBody,
+    ResolveOut, SetEnvironmentBody,
 )
 from ..services import agent as agent_svc
 from ..services import dag as dag_svc
@@ -411,7 +411,67 @@ def register_dataset(project_id: str, body: DatasetRegister, db: Session = Depen
     return _dataset_out(d)
 
 
-# ================================================================ Environments
+@router.patch("/datasets/{dataset_id}", response_model=DatasetOut)
+def patch_dataset(dataset_id: str, body: DatasetPatch, db: Session = Depends(get_db)):
+    """重命名数据集 / 打标签。"""
+    d = db.get(Dataset, dataset_id)
+    if d is None:
+        raise HTTPException(404, f"数据集不存在: {dataset_id}")
+    if body.name is not None:
+        if not body.name.strip():
+            raise HTTPException(400, "数据集名不能为空")
+        d.name = body.name.strip()
+    if body.tags is not None:
+        meta = dict(d.metadata_ or {})
+        meta["tags"] = body.tags
+        d.metadata_ = meta
+    db.commit()
+    db.refresh(d)
+    return _dataset_out(d)
+
+
+@router.delete("/datasets/{dataset_id}")
+def delete_dataset(dataset_id: str, db: Session = Depends(get_db)):
+    """删除数据集记录（不删除原始文件）。先断开子数据集的版本链引用。"""
+    d = db.get(Dataset, dataset_id)
+    if d is None:
+        raise HTTPException(404, f"数据集不存在: {dataset_id}")
+    # 断开引用本数据集的子数据集（避免外键冲突）
+    db.query(Dataset).filter(Dataset.parent_dataset_id == dataset_id).update(
+        {Dataset.parent_dataset_id: None})
+    db.delete(d)
+    db.commit()
+    return {"deleted": dataset_id}
+
+
+@router.get("/projects/{project_id}/files")
+def project_files(project_id: str, path: str = "", db: Session = Depends(get_db)):
+    """工作区文件浏览（本地项目）。path 相对工作区目录。"""
+    from ..services.execution import project_dir
+    p = _get_project(db, project_id)
+    base = Path(p.workdir) if p.workdir else project_dir(project_id)
+    if not base.is_dir():
+        return {"path": str(base), "is_dir": False, "dirs": [], "files": []}
+    target = (base / path).resolve() if path else base
+    if not str(target).startswith(str(base)):
+        raise HTTPException(400, "路径越界")
+    if not target.is_dir():
+        return {"path": str(target), "is_dir": False, "dirs": [], "files": []}
+    dirs, files = [], []
+    try:
+        for e in sorted(target.iterdir()):
+            if e.name.startswith("."):
+                continue
+            try:
+                if e.is_dir():
+                    dirs.append(e.name)
+                elif e.is_file():
+                    files.append({"name": e.name, "size": e.stat().st_size})
+            except OSError:
+                continue
+    except OSError:
+        pass
+    return {"path": str(target), "is_dir": True, "dirs": dirs, "files": files}
 
 @router.post("/projects/{project_id}/environments/discover", response_model=EnvironmentOut)
 def discover_environment(project_id: str, db: Session = Depends(get_db)):

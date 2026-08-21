@@ -59,6 +59,11 @@ export const api = {
   // datasets
   registerDataset: (projectId: string, body: { name: string; dtype?: string; format?: string; location?: string; phase?: string; metadata?: Record<string, unknown> }) =>
     req<Dataset>(`/projects/${projectId}/datasets`, { method: 'POST', body: JSON.stringify(body) }),
+  patchDataset: (id: string, body: { name?: string; tags?: string[] }) =>
+    req<Dataset>(`/datasets/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteDataset: (id: string) => req<{ deleted: string }>(`/datasets/${id}`, { method: 'DELETE' }),
+  projectFiles: (projectId: string, path: string) =>
+    req<{ path: string; is_dir: boolean; dirs: string[]; files: { name: string; size: number }[] }>(`/projects/${projectId}/files?path=${encodeURIComponent(path)}`),
 
   // environments
   discoverEnvironment: (projectId: string) =>

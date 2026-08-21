@@ -347,6 +347,14 @@ pre.logs {
 }
 .ds-row:hover { border-color: var(--border-strong); }
 .ds-row .arrow { color: var(--text-faint); }
+.ds-actions { display: flex; gap: 3px; }
+.ds-actions button { padding: 2px 6px; font-size: 11px; }
+.file-icon {
+  width: 12px; height: 14px; border: 1.5px solid var(--text-dim); border-radius: 2px;
+  background: var(--panel); position: relative; flex: none;
+}
+.file-icon::before { content:''; position:absolute; right:-3px; top:-3px; width:5px; height:5px; border:1.5px solid var(--text-dim); border-left:none; border-bottom:none; border-radius:0 2px 0 0; background: var(--panel); }
+.dir-item.file { color: var(--text-dim); }
 
 /* ---------------- 设置面板（选项栏）---------------- */
 .settings-overlay {

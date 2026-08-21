@@ -219,6 +219,11 @@ class DatasetRegister(BaseModel):
     metadata: dict = Field(default_factory=dict)
 
 
+class DatasetPatch(BaseModel):
+    name: str | None = None
+    tags: list[str] | None = None
+
+
 # ---------------------------------------------------------------- Agent / Remote
 
 class IntentRequest(BaseModel):
