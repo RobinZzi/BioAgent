@@ -640,6 +640,15 @@ def project_artifacts(project_id: str, db: Session = Depends(get_db)):
     return [_artifact_out(a) for a in arts]
 
 
+@router.get("/projects/{project_id}/report")
+def project_report(project_id: str, db: Session = Depends(get_db)):
+    """生成并返回项目分析报告 HTML（动态生成）。"""
+    p = _get_project(db, project_id)
+    from ..services.report import render_report_to_file
+    path = render_report_to_file(db, p)
+    return FileResponse(path, media_type="text/html", filename=path.name)
+
+
 @router.get("/artifacts/{artifact_id}/content")
 def artifact_content(artifact_id: str):
     db = SessionLocal()

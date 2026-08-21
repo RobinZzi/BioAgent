@@ -25,6 +25,9 @@ export default function ArtifactGallery({ projectId }: { projectId: string }) {
       <div className="flex" style={{ marginBottom: 12 }}>
         <span className="muted">共 {arts.length} 个产物 · 由 Analysis Event 产生（不会出现「这张图是哪次分析生成的」问题）</span>
         <span className="spacer" style={{ flex: 1 }} />
+        <button className="primary" onClick={() => window.open(`/api/projects/${projectId}/report`, '_blank')}>
+          生成分析报告
+        </button>
         <select value={filter} onChange={(e) => setFilter(e.target.value)}>
           <option value="all">全部</option>
           {kinds.map((k) => <option key={k} value={k}>{KIND_LABEL[k] ?? k}</option>)}
