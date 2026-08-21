@@ -155,8 +155,10 @@ def create_and_run_event(
     )
     relation = EventRelation(relation) if not isinstance(relation, EventRelation) else relation
 
-    # 环境解析：对话指定 → 项目最近环境（自动回退）
+    # 环境解析：对话指定 → 项目关联服务器（server_id）→ 项目最近环境（自动回退）
     env_id = conversation.active_environment_id
+    if env_id is None:
+        env_id = project.server_id   # 服务器端项目：直接用关联服务器凭据
     if env_id is None:
         fallback_env = (db.query(ComputeEnvironment)
                         .filter(ComputeEnvironment.project_id == project.id)

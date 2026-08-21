@@ -29,6 +29,8 @@ class ProjectOut(BaseModel):
     compute_location: str
     workdir: str | None = None
     server_id: str | None = None
+    server_name: str | None = None
+    server_host: str | None = None
     created_at: datetime | None = None
     n_conversations: int = 0
     n_datasets: int = 0

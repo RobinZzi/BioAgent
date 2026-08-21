@@ -69,7 +69,7 @@ export default function NewProjectModal({
                 <option value="">选择已链接的服务器</option>
                 {servers.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name}（{s.ssh_host ? `SSH ${s.ssh_host}` : 'Connector'}）
+                    {s.name || '未命名服务器'}（{s.ssh_host || s.connector_url || 'Connector'}）
                   </option>
                 ))}
               </select>
@@ -120,7 +120,7 @@ function DirPicker({ onPick }: { onPick: (p: string) => void }) {
 
 function AddServerForm({ onAdded }: { onAdded: (env: Environment) => void }) {
   const [mode, setMode] = useState<'ssh' | 'connector'>('ssh')
-  const [form, setForm] = useState({ name: '', host: '', port: '22', user: '', password: '', key_path: '', connector_url: '', token: '' })
+  const [form, setForm] = useState({ name: 'HPC', host: '', port: '22', user: '', password: '', key_path: '', connector_url: '', token: '' })
   const [busy, setBusy] = useState(false)
 
   const submit = async () => {
@@ -148,7 +148,7 @@ function AddServerForm({ onAdded }: { onAdded: (env: Environment) => void }) {
         <button className={mode === 'connector' ? 'active' : ''} onClick={() => setMode('connector')}>Connector</button>
       </div>
       <div className="create-form">
-        <input placeholder="环境名" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        <input placeholder="服务器名（如 Lab HPC）" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         {mode === 'ssh' ? (
           <>
             <input placeholder="服务器地址" value={form.host} onChange={(e) => setForm({ ...form, host: e.target.value })} />

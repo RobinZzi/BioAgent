@@ -402,8 +402,10 @@ button.primary.danger { background: linear-gradient(135deg, #ef4444, #dc2626); b
 /* 项目分组 */
 .group-header {
   padding: 10px 14px 4px; font-size: 10px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint);
+  text-transform: uppercase; letter-spacing: .06em; color: var(--text-dim);
+  display: flex; align-items: center;
 }
+.group-icon { display: inline-flex; align-items: center; margin-right: 6px; color: var(--text-faint); }
 
 /* 目录浏览 */
 .dir-picker {

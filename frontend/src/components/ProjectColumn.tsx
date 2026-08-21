@@ -42,6 +42,14 @@ export default function ProjectColumn({
   const local = projects.filter((p) => p.data_source === 'local')
   const remote = projects.filter((p) => p.data_source === 'remote')
 
+  // 服务器端项目按服务器归属分组（服务器名 + IP）
+  const remoteGroups = new Map<string, Project[]>()
+  for (const p of remote) {
+    const key = p.server_name ?? p.server_host ?? '未指定服务器'
+    if (!remoteGroups.has(key)) remoteGroups.set(key, [])
+    remoteGroups.get(key)!.push(p)
+  }
+
   const toggleSelect = (id: string) => {
     setSelected((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
   }
@@ -86,12 +94,16 @@ export default function ProjectColumn({
                  onChange={() => toggleSelect(p.id)}
                  onClick={(e) => e.stopPropagation()} />
         )}
-        <span className="proj-icon">{p.data_source === 'remote' ? <ServerIcon /> : <LocalIcon />}</span>
         {p.name}
       </div>
       <div className="meta">
         <span className="badge gray">{DTYPE_LABEL[p.data_source] ?? p.data_source}</span>
         {p.n_datasets} 数据集 · {p.n_events} 事件
+        {p.data_source === 'remote' && p.server_host && (
+          <span className="mono muted" style={{ display: 'block', marginTop: 2 }}>
+            {p.server_name} · {p.server_host}
+          </span>
+        )}
         {p.workdir && <span className="mono muted" style={{ display: 'block', marginTop: 2 }}>{p.workdir}</span>}
       </div>
       {manage && selected.includes(p.id) && selected.length === 1 && (
@@ -128,13 +140,20 @@ export default function ProjectColumn({
 
       <div className="col-body">
         {local.length > 0 && (
-          <div className="group-header">本地项目</div>
+          <div className="group-header"><span className="group-icon"><LocalIcon /></span>本地项目</div>
         )}
         <div className="project-list">{local.map(renderItem)}</div>
         {remote.length > 0 && (
-          <div className="group-header">服务器端项目</div>
+          <div className="group-header"><span className="group-icon"><ServerIcon /></span>服务器端项目</div>
         )}
-        <div className="project-list">{remote.map(renderItem)}</div>
+        {[...remoteGroups.entries()].map(([serverKey, items]) => (
+          <div key={serverKey}>
+            <div className="group-header server-group" style={{ paddingLeft: 28 }}>
+              {serverKey}
+            </div>
+            <div className="project-list">{items.map(renderItem)}</div>
+          </div>
+        ))}
         {projects.length === 0 && (
           <div className="empty">暂无项目，点击「新建」创建。</div>
         )}

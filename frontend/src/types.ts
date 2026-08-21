@@ -8,6 +8,8 @@ export interface Project {
   compute_location: string
   workdir: string | null
   server_id: string | null
+  server_name: string | null
+  server_host: string | null
   created_at: string | null
   n_conversations: number
   n_datasets: number

@@ -35,11 +35,18 @@ router = APIRouter(prefix="/api")
 # ================================================================ 工具函数
 
 def _project_out(p: Project, db: Session) -> ProjectOut:
+    server_name = server_host = None
+    if p.server_id:
+        env = db.get(ComputeEnvironment, p.server_id)
+        if env is not None:
+            server_name = env.name
+            server_host = env.ssh_host or env.connector_url or None
     return ProjectOut(
         id=p.id, name=p.name, description=p.description,
         data_source=p.data_source.value if hasattr(p.data_source, "value") else p.data_source,
         compute_location=p.compute_location.value if hasattr(p.compute_location, "value") else p.compute_location,
         workdir=p.workdir, server_id=p.server_id,
+        server_name=server_name, server_host=server_host,
         created_at=p.created_at,
         n_conversations=len(p.conversations),
         n_datasets=len(p.datasets),
