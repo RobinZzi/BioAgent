@@ -299,6 +299,16 @@ export default function SettingsPanel({
           </div>
 
           <div className="settings-section">
+            <h4>系统</h4>
+            <div className="muted">
+              认证模式：{settings?.auth_enabled
+                ? '已开启（注册/登录，适合共享服务器部署）'
+                : '单机模式（免登录，个人本机使用）'}
+              <div style={{ marginTop: 4 }}>切换需设置 BIOAGENT_AUTH_ENABLED=true 并重启后端。</div>
+            </div>
+          </div>
+
+          <div className="settings-section">
             <h4>API</h4>
             <div className="muted">
               接口文档：<a href="http://127.0.0.1:8000/docs" target="_blank" rel="noreferrer">Swagger UI</a> ·

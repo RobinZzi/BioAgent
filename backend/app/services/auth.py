@@ -9,6 +9,7 @@ import secrets
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..db import get_db
 from ..models import User
 
@@ -32,8 +33,14 @@ def new_token() -> str:
 
 
 def get_current_user(authorization: str = Header(default=""),
-                     db: Session = Depends(get_db)) -> User:
-    """FastAPI dependency：从 Authorization Bearer token 识别用户。"""
+                     db: Session = Depends(get_db)) -> "User | None":
+    """FastAPI dependency：识别当前用户。
+
+    单机模式（auth_enabled=False，默认）返回 None（免登录）；
+    认证模式校验 Authorization Bearer token。
+    """
+    if not settings.auth_enabled:
+        return None
     if not authorization.startswith("Bearer "):
         raise HTTPException(401, "未认证，请先登录")
     token = authorization[7:].strip()

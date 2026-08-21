@@ -28,9 +28,9 @@ export default function App() {
   const [dragging, setDragging] = useState<'left' | 'mid' | null>(null)
 
   useEffect(() => {
-    const token = localStorage.getItem('bioagent_token')
-    if (!token) { setAuthChecked(true); return }
-    api.me().then(() => { setAuthed(true); setAuthChecked(true) })
+    // 单机模式：无需 token 直接可用；认证模式：未登录则跳登录页
+    api.listProjects()
+      .then(() => { setAuthed(true); setAuthChecked(true) })
       .catch(() => { localStorage.removeItem('bioagent_token'); setAuthChecked(true) })
   }, [])
 

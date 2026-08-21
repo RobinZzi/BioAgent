@@ -169,23 +169,26 @@ def login(body: AuthBody, db: Session = Depends(get_db)):
 
 
 @router.get("/auth/me")
-def me(user: User = Depends(get_current_user)):
-    return {"username": user.username, "is_admin": user.is_admin}
+def me(user: User | None = Depends(get_current_user)):
+    if user is None:
+        return {"username": None, "is_admin": False, "standalone": True}
+    return {"username": user.username, "is_admin": user.is_admin, "standalone": False}
 
 
 # ================================================================ Projects
 
 @router.get("/projects", response_model=list[ProjectOut])
-def list_projects(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    projects = (db.query(Project)
-                .filter(Project.owner_id == user.id)
-                .order_by(Project.created_at.desc()).all())
+def list_projects(db: Session = Depends(get_db), user: User | None = Depends(get_current_user)):
+    q = db.query(Project)
+    if user is not None:
+        q = q.filter(Project.owner_id == user.id)
+    projects = q.order_by(Project.created_at.desc()).all()
     return [_project_out(p, db) for p in projects]
 
 
 @router.post("/projects", response_model=ProjectOut, status_code=201)
 def create_project(body: ProjectCreate, db: Session = Depends(get_db),
-                   user: User = Depends(get_current_user)):
+                   user: User | None = Depends(get_current_user)):
     workdir = body.workdir.strip() or None
     server_id = body.server_id.strip() or None
     # 本地项目工作区：确保目录存在（可创建）
@@ -194,7 +197,7 @@ def create_project(body: ProjectCreate, db: Session = Depends(get_db),
             Path(workdir).mkdir(parents=True, exist_ok=True)
         except OSError as e:
             raise HTTPException(400, f"无法创建工作区目录: {e}")
-    p = Project(id=new_id("proj"), owner_id=user.id, name=body.name, description=body.description,
+    p = Project(id=new_id("proj"), owner_id=user.id if user else None, name=body.name, description=body.description,
                 data_source=body.data_source, compute_location=body.compute_location,
                 workdir=workdir, server_id=server_id)
     db.add(p)
@@ -210,7 +213,7 @@ class ProjectPatch(BaseModel):
 
 @router.patch("/projects/{project_id}", response_model=ProjectOut)
 def patch_project(project_id: str, body: ProjectPatch, db: Session = Depends(get_db),
-                  user: User = Depends(get_current_user)):
+                  user: User | None = Depends(get_current_user)):
     """重命名项目 / 重定位工作区。"""
     p = _get_project(db, project_id, user)
     if body.name is not None:
@@ -257,7 +260,7 @@ class BatchDeleteBody(BaseModel):
 
 @router.post("/projects/batch-delete")
 def batch_delete_projects(body: BatchDeleteBody, db: Session = Depends(get_db),
-                          user: User = Depends(get_current_user)):
+                          user: User | None = Depends(get_current_user)):
     """批量删除项目。delete_files=True 时连带删除项目目录（log/图片/产物）；
     False 时仅删除数据库记录，文件保留。"""
     import shutil
@@ -265,7 +268,7 @@ def batch_delete_projects(body: BatchDeleteBody, db: Session = Depends(get_db),
     deleted = []
     for pid in body.project_ids:
         p = db.get(Project, pid)
-        if p is None or p.owner_id != user.id:
+        if p is None or (user is not None and p.owner_id != user.id):
             continue
         if p is None:
             continue
@@ -280,7 +283,7 @@ def batch_delete_projects(body: BatchDeleteBody, db: Session = Depends(get_db),
 
 @router.get("/projects/{project_id}", response_model=ProjectDetail)
 def project_detail(project_id: str, db: Session = Depends(get_db),
-                   user: User = Depends(get_current_user)):
+                   user: User | None = Depends(get_current_user)):
     p = _get_project(db, project_id, user)
     convs = db.query(Conversation).filter(Conversation.project_id == project_id).all()
     dss = db.query(Dataset).filter(Dataset.project_id == project_id).order_by(
@@ -645,6 +648,7 @@ def get_settings():
         "llm_model": settings.llm_model,
         "llm_base_url": settings.llm_base_url,
         "version": settings.version,
+        "auth_enabled": settings.auth_enabled,
         "agent_status": llm_svc.llm_status(),
     }
 

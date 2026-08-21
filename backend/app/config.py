@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     # 发现超时（秒）
     discovery_timeout: float = 25.0
 
+    # 认证开关：False=单机免登录（默认，个人本机使用）；
+    # True=需注册/登录（实验室共享 / 服务器部署，BIOAGENT_AUTH_ENABLED=true）
+    auth_enabled: bool = False
+
     # ---- LLM Agent（v0.2，OpenAI 兼容）----
     # 未配置 api_key 时自动回退规则引擎
     llm_mode: str = "off"          # off | echo | real

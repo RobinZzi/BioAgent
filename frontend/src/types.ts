@@ -78,6 +78,7 @@ export interface Settings {
   llm_model: string
   llm_base_url?: string
   version: string
+  auth_enabled: boolean
   agent_status: AgentStatus
 }
 
