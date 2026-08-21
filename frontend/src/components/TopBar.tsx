@@ -29,7 +29,10 @@ export default function TopBar({
 
   return (
     <div className="topbar">
-      <span className="title">BioAgent</span>
+      <span className="brand">
+        <span className="logo" />
+        <span className="title">BioAgent</span>
+      </span>
       <span className="subtitle">生信分析工作台</span>
       <span className="spacer" />
 
