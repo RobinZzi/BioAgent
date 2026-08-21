@@ -101,7 +101,20 @@ class MockExecutor(BaseExecutor):
         metrics: dict = {}
 
         # ------------------------------------------------------------ scRNA
-        if cap_id == "scrna.import_10x":
+        if cap_id == "scrna.import_mtx":
+            cells = rng.randint(2000, 12000)
+            genes = rng.randint(15000, 25000)
+            metrics = {"cells": cells, "genes": genes}
+            add_dataset(f"{input_stem}_mtx.h5ad", "scrna", "h5ad", "raw",
+                        {"cells": cells, "genes": genes, "source": "10x matrix market"})
+            _write_html(outdir / "import_report.html", "10x 矩阵导入报告",
+                        [("导入结果", _html_table(["指标", "数值"], [
+                            ["细胞数", f"{cells:,}"], ["基因数", f"{genes:,}"]])),
+                         ("说明", "已从 10x 矩阵市场格式转换为 h5ad。")])
+            add_file("report", "import_report.html")
+            log.append(f"[mock] import mtx: {cells:,} cells x {genes:,} genes")
+
+        elif cap_id == "scrna.import_10x":
             cells = params.get("expect_cells", 5000)
             genes = rng.randint(15000, 25000)
             mean_reads = rng.randint(20000, 50000)

@@ -102,6 +102,7 @@ def execute_workflow(db: Session, conversation: Conversation, workflow_id: str,
 # (关键词列表, capability_id, 参数缺省, 说明)。顺序即优先级（先匹配先得）。
 INTENT_RULES: list[tuple[list[str], str, dict, str]] = [
     (["fastqc", "下机质量", "碱基质量"], "bulk_rna.fastqc", {}, "FastQC 质控"),
+    (["mtx", "10x 矩阵", "矩阵导入", "读入矩阵"], "scrna.import_mtx", {}, "10x 矩阵导入"),
     (["cellranger", "10x", "单细胞下机", "下机单细胞"], "scrna.import_10x", {}, "10x 下机导入"),
     (["trim", "裁切", "去接头", "cutadapt", "接头"], "bulk_rna.trimming", {}, "去接头裁切"),
     (["定量", "quantification", "featurecounts", "count matrix"], "bulk_rna.quantification", {}, "基因定量"),

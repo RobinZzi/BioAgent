@@ -111,6 +111,15 @@ BIOAGENT_LLM_MODEL=deepseek-chat \
 
 意图解析 / 回复生成失败时**自动回退规则引擎**。调试：`POST /api/agent/intent`。
 
+## Docker 部署
+
+```bash
+docker compose up -d --build
+# 前端 http://localhost:5173（Nginx 代理 /api → 后端 :8000）
+# 后端 API http://localhost:8000/docs
+# 数据持久化在 docker volume bioagent-data
+```
+
 ## Local Connector（远程执行）
 
 ```bash

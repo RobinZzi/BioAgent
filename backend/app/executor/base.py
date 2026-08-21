@@ -21,6 +21,7 @@ class TaskSpec:
     input_dataset_path: str | None
     output_dir: str
     environment_id: str | None = None
+    seed: int | None = None          # 随机种子（可复现性：leiden/umap 等）
 
 
 @dataclass

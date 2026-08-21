@@ -12,7 +12,7 @@ def test_capability_catalog_complete():
     assert len(CAPABILITIES) >= 20
     for c in CAPABILITIES:
         assert c["capability_id"] in CAPABILITIES_BY_ID
-        assert c["dataset_dtype"] in ("scrna", "bulk_rna", "fastq")
+        assert c["dataset_dtype"] in ("scrna", "bulk_rna", "fastq", "other")
         assert c["requires_phase"]
         assert isinstance(c["implementations"], list)
         for impl in c["implementations"]:

@@ -20,15 +20,26 @@ def render_scanpy_script(capability_id: str, params: dict, input_path: str,
         "import matplotlib.pyplot as plt\n"
         "import scanpy as sc\n"
         f"np.random.seed({seed})\n"
+        f"SEED = {seed}\n"
+        "sc.settings.seed = SEED\n"
         f"IN = {inp}; OUT = {out}; OUTDIR = {odir}\n"
         "os.makedirs(OUTDIR, exist_ok=True)\n"
         "def _savefig(fig, path):\n"
         "    fig = fig if hasattr(fig, 'savefig') else plt.gcf()\n"
         "    fig.savefig(path, dpi=110, bbox_inches='tight')\n"
         "    plt.close(fig)\n"
-        "adata = sc.read_h5ad(IN)\n"
+        "if os.path.isdir(IN):\n"
+        "    adata = sc.read_10x_mtx(IN, var_names='gene_symbols')\n"
+        "else:\n"
+        "    adata = sc.read_h5ad(IN)\n"
         "print('input:', adata.shape)\n"
     )
+
+    if capability_id == "scrna.import_mtx":
+        return header + (
+            "print('mtx loaded:', adata.shape)\n"
+            "adata.write_h5ad(OUT)\n"
+        )
     if capability_id == "scrna.inspect":
         return header + (
             "print('n_obs:', adata.n_obs, 'n_vars:', adata.n_vars)\n"
@@ -76,14 +87,14 @@ def render_scanpy_script(capability_id: str, params: dict, input_path: str,
         )
     if capability_id == "scrna.umap":
         return header + (
-            "sc.tl.umap(adata, min_dist=%s)\n"
+            "sc.tl.umap(adata, min_dist=%s, random_state=SEED)\n"
             "_savefig(sc.pl.umap(adata, show=False), os.path.join(OUTDIR,'umap.png'))\n"
             "adata.write_h5ad(OUT)\n" % json.dumps(params.get("min_dist", 0.5))
         )
     if capability_id == "scrna.clustering":
         return header + (
-            "sc.tl.leiden(adata, resolution=%s, key_added='leiden')\n"
-            "sc.tl.umap(adata)\n"
+            "sc.tl.leiden(adata, resolution=%s, key_added='leiden', random_state=SEED)\n"
+            "sc.tl.umap(adata, random_state=SEED)\n"
             "_savefig(sc.pl.umap(adata, color='leiden', show=False, legend_loc='on data'), os.path.join(OUTDIR,'umap_clusters.png'))\n"
             "print('n_clusters:', adata.obs['leiden'].nunique())\n"
             "adata.write_h5ad(OUT)\n" % json.dumps(params.get("resolution", 0.5))

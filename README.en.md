@@ -115,6 +115,15 @@ BIOAGENT_LLM_MODEL=deepseek-chat \
 Intent parsing / reply generation **falls back to the rule engine** on any failure.
 Debug: `POST /api/agent/intent`.
 
+## Docker Deployment
+
+```bash
+docker compose up -d --build
+# Frontend http://localhost:5173 (Nginx proxies /api → backend :8000)
+# Backend API http://localhost:8000/docs
+# Data persisted in docker volume bioagent-data
+```
+
 ## Local Connector (remote execution)
 
 ```bash

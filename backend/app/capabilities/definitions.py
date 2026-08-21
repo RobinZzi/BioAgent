@@ -123,6 +123,14 @@ CAPABILITIES: list[dict] = [
         keywords=["cellranger", "10x", "单细胞下机", "下机单细胞", "cell count"],
     ),
     _cap(
+        "scrna.import_mtx", "10x 矩阵导入", "scrna", "other", "raw", "raw", True,
+        [SCANPY],
+        {},
+        {"reports": ["import_report.html"]},
+        "读取 10x 矩阵市场格式目录（matrix.mtx + genes.tsv + barcodes.tsv）→ h5ad。",
+        keywords=["mtx", "10x 矩阵", "矩阵导入", "matrix market", "读入矩阵"],
+    ),
+    _cap(
         "scrna.inspect", "数据检查", "scrna", "scrna", "raw", "raw", False,
         [SCANPY],
         {"n_cells_sample": _p("integer", 500, minimum=10, description="采样细胞数")},

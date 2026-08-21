@@ -118,7 +118,8 @@ class SSHExecutor(BaseExecutor):
         inp = task.input_dataset_path or ""
         if impl == "scanpy":
             text = templates.render_scanpy_script(
-                task.capability_id, task.parameters, inp, f"{remote_out}/output.h5ad", remote_out)
+                task.capability_id, task.parameters, inp, f"{remote_out}/output.h5ad",
+                remote_out, seed=task.seed or 42)
             return "run_scanpy.py", text, lambda rin: f"{_DEFAULT_PYTHON} {remote_base}/run_scanpy.py"
         if impl in ("DESeq2", "edgeR"):
             text = templates.render_deseq2_script(

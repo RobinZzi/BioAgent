@@ -9,7 +9,7 @@ const PHASE_COLOR: Record<string, string> = {
 }
 
 const DTYPE_LABEL: Record<string, string> = {
-  scrna: '单细胞 (h5ad)', bulk_rna: 'Bulk 矩阵 (csv)', fastq: '下机 (fastq)',
+  scrna: '单细胞 (h5ad)', bulk_rna: 'Bulk 矩阵 (csv)', fastq: '下机 (fastq)', other: '10x 矩阵目录 (mtx)',
 }
 
 export default function DatasetChain({
@@ -36,7 +36,7 @@ export default function DatasetChain({
   }
 
   const dtypeChanged = (dtype: string) => {
-    const fmt = dtype === 'scrna' ? 'h5ad' : dtype === 'bulk_rna' ? 'csv' : 'fastq.gz'
+    const fmt = dtype === 'scrna' ? 'h5ad' : dtype === 'bulk_rna' ? 'csv' : dtype === 'other' ? '10x_mtx' : 'fastq.gz'
     setForm({ ...form, dtype, format: fmt })
   }
 
@@ -76,6 +76,7 @@ export default function DatasetChain({
               <option value="scrna">{DTYPE_LABEL.scrna}</option>
               <option value="bulk_rna">{DTYPE_LABEL.bulk_rna}</option>
               <option value="fastq">{DTYPE_LABEL.fastq}</option>
+              <option value="other">{DTYPE_LABEL.other}</option>
             </select>
             <input placeholder="本地路径（留空=生成 mock 占位）" value={form.location}
                    onChange={(e) => setForm({ ...form, location: e.target.value })}

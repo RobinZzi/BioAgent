@@ -179,7 +179,16 @@ a:hover { text-decoration: underline; }
 .result-tabs button.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 500; }
 
 /* DAG */
-.dag-layers { display: flex; gap: 16px; overflow-x: auto; padding: 14px; align-items: flex-start; }
+.dag-layers { display: flex; gap: 0; overflow-x: auto; padding: 14px; align-items: flex-start; }
+.dag-layer-arrow {
+  flex: none; align-self: center; width: 26px; height: 2px;
+  background: linear-gradient(90deg, var(--border-strong), var(--accent));
+  position: relative; margin: 0 4px;
+}
+.dag-layer-arrow::after {
+  content: ''; position: absolute; right: 0; top: -3px;
+  border-left: 6px solid var(--accent); border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+}
 .dag-layer { display: flex; flex-direction: column; gap: 8px; min-width: 180px; }
 .dag-layer-label { font-size: 10.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .05em; }
 .dag-node {

@@ -1,0 +1,28 @@
+# BioAgent 一键容器化：docker compose up -d --build
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - bioagent-data:/app/data
+    environment:
+      - BIOAGENT_EXECUTOR_MODE=auto
+      # LLM Agent（可选，也可在设置面板配置）
+      - BIOAGENT_LLM_MODE=off
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  bioagent-data:

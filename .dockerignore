@@ -1,0 +1,18 @@
+# Docker 构建上下文排除
+.git
+.github
+docs
+scripts
+docker
+backend/.venv
+backend/.venv311
+backend/data
+backend/tests
+frontend/node_modules
+frontend/dist
+.uv-cache
+.uv-python
+.npm-cache
+connector/work
+*.db
+.DS_Store

@@ -3,7 +3,9 @@
 queued → running → succeeded / failed
 成功时：写产物（Artifact）、建输出数据集（Dataset 版本链）、建 DAG 边
 （depends_on / re_run）、更新会话上下文指针。失败时：结构化错误入库。
+可复现性：确定性随机种子 + 环境工具版本快照记录在事件 metrics。
 """
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -53,6 +55,50 @@ def _is_mock_dataset(ds: Dataset) -> bool:
         return head.startswith(b"\x89HDF placeholder") or head.startswith(b"\x89HDF mock")
     except OSError:
         return False
+
+
+_TOOL_MODULES = {
+    "scanpy": "scanpy", "anndata": "anndata", "leidenalg": "leidenalg",
+    "pandas": "pandas", "numpy": "numpy", "matplotlib": "matplotlib",
+    "scipy": "scipy", "h5py": "h5py", "seaborn": "seaborn",
+}
+
+
+def _capture_env_snapshot(manifest: Manifest | None, runtime_id: str | None) -> dict | None:
+    """捕获运行环境工具版本快照（可复现性：记录实际使用的工具版本）。"""
+    import json as _json
+    import subprocess
+
+    if manifest is None or not runtime_id:
+        return None
+    py = None
+    for rt in manifest.runtimes:
+        if rt.id == runtime_id:
+            if rt.type in ("python", "venv"):
+                py = rt.path
+            elif rt.type == "conda" and rt.path:
+                py = str(Path(rt.path) / "bin" / "python")
+            break
+    if not py or not Path(py).exists():
+        return None
+    mods = {t.tool_id: _TOOL_MODULES[t.tool_id] for t in manifest.tools
+            if t.runtime_id == runtime_id and t.language == "python"
+            and t.tool_id in _TOOL_MODULES}
+    if not mods:
+        return None
+    code = ("import importlib.metadata as m,json,sys;"
+            "r={};"
+            "[r.update({x:(lambda: m.version(x))()}) if True else None for x in sys.argv[1:]];"
+            "print(json.dumps(r))")
+    try:
+        r = subprocess.run([py, "-c", code] + list(mods.values()),
+                           capture_output=True, text=True, timeout=30)
+        if r.returncode != 0:
+            return None
+        tools = _json.loads(r.stdout.strip().splitlines()[-1])
+        return {"runtime_id": runtime_id, "python": py, "tools": tools}
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def resolve_implementation(db: Session, manifest: Manifest | None, capability: dict,
@@ -135,11 +181,18 @@ def create_and_run_event(
     event.implementation = implementation
     event.runtime_id = runtime_id
 
+    # ---- 可复现性：确定性随机种子 + 环境工具版本快照 ----
+    seed = int(hashlib.md5(event.id.encode()).hexdigest()[:8], 16)
+    event.metrics["seed"] = seed
+    snapshot = _capture_env_snapshot(manifest, runtime_id)
+    if snapshot:
+        event.metrics["env_snapshot"] = snapshot
+
     task = TaskSpec(
         task_id=event.id, capability_id=capability_id, implementation=implementation,
         runtime_id=runtime_id, inputs=event.inputs, parameters=validated,
         input_dataset_path=input_dataset.location if input_dataset else None,
-        output_dir=str(outdir), environment_id=env_id,
+        output_dir=str(outdir), environment_id=env_id, seed=seed,
     )
 
     executor = None

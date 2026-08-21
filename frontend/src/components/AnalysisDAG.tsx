@@ -38,6 +38,25 @@ export default function AnalysisDAG({
   const layers: DagNode[][] = Array.from({ length: maxDepth + 1 }, () => [])
   for (const n of dag.nodes) layers[dag.depth[n.id] ?? 0].push(n)
 
+  // 依赖连线：构建 子节点 → 父节点 映射（depends_on / re_run）
+  const nodeById = new Map(dag.nodes.map((n) => [n.id, n]))
+  const parentMap = new Map<string, { id: string; relation: string }[]>()
+  for (const e of dag.edges) {
+    const list = parentMap.get(e.target) ?? []
+    list.push({ id: e.source, relation: e.relation })
+    parentMap.set(e.target, list)
+  }
+  const depsLabel = (n: DagNode) => {
+    const parents = parentMap.get(n.id) ?? []
+    if (parents.length === 0) return ''
+    const names = parents.map((p) => {
+      const pn = nodeById.get(p.id)
+      const label = pn ? (CAP_LABEL[pn.capability_id] ?? pn.capability_id) : p.id.slice(0, 10)
+      return p.relation === 're_run' ? `${label}(重跑)` : label
+    })
+    return names.join(' + ')
+  }
+
   const rerun = async (node: DagNode) => {
     if (!confirm(`重跑事件 ${node.capability_id}（参数默认为原参数）？新事件将以 re_run 边挂到 DAG。`)) return
     setRerunning(node.id)
@@ -85,26 +104,33 @@ export default function AnalysisDAG({
 
       <div className="dag-layers">
         {layers.map((layer, depth) => (
-          <div key={depth} className="dag-layer">
-            <div className="dag-layer-label">步骤 {depth}</div>
-            {layer.map((n) => (
-              <div key={n.id}
-                   className={`dag-node ${statusClass(n.status)} ${(n.id === selectedEventId || compareIds.includes(n.id)) ? 'selected' : ''}`}
-                   onClick={() => nodeClick(n)} title={n.id}>
-                <div className="cap">
-                  {compareMode && (
-                    <input type="checkbox" style={{ marginRight: 6 }}
-                           checked={compareIds.includes(n.id)}
-                           onChange={() => onToggleCompare(n.id)}
-                           onClick={(e) => e.stopPropagation()} />
+          <div key={depth} style={{ display: 'contents' }}>
+            {depth > 0 && <div className="dag-layer-arrow" aria-hidden="true" />}
+            <div className="dag-layer">
+              <div className="dag-layer-label">步骤 {depth}</div>
+              {layer.map((n) => (
+                <div key={n.id}
+                     className={`dag-node ${statusClass(n.status)} ${(n.id === selectedEventId || compareIds.includes(n.id)) ? 'selected' : ''}`}
+                     onClick={() => nodeClick(n)} title={n.id}>
+                  <div className="cap">
+                    {compareMode && (
+                      <input type="checkbox" style={{ marginRight: 6 }}
+                             checked={compareIds.includes(n.id)}
+                             onChange={() => onToggleCompare(n.id)}
+                             onClick={(e) => e.stopPropagation()} />
+                    )}
+                    {CAP_LABEL[n.capability_id] ?? n.capability_id}
+                  </div>
+                  <div className="meta">
+                    <span className="mono">{n.id.slice(0, 14)}</span> · impl: {n.implementation}
+                  </div>
+                  {paramSummary(n) && <div className="meta mono">{paramSummary(n)}</div>}
+                  {depsLabel(n) && (
+                    <div className="meta" style={{ color: 'var(--text-faint)' }}>
+                      依赖: {depsLabel(n)}
+                    </div>
                   )}
-                  {CAP_LABEL[n.capability_id] ?? n.capability_id}
-                </div>
-                <div className="meta">
-                  <span className="mono">{n.id.slice(0, 14)}</span> · impl: {n.implementation}
-                </div>
-                {paramSummary(n) && <div className="meta mono">{paramSummary(n)}</div>}
-                <div className="actions">
+                  <div className="actions">
                   <span className={`badge ${n.status === 'succeeded' ? 'green' : n.status === 'failed' ? 'red' : 'amber'}`}>
                     {n.status}
                   </span>
@@ -116,6 +142,7 @@ export default function AnalysisDAG({
                 </div>
               </div>
             ))}
+            </div>
           </div>
         ))}
       </div>

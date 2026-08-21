@@ -105,7 +105,7 @@ class LocalExecutor(BaseExecutor):
 
         script = templates.render_scanpy_script(
             task.capability_id, task.parameters, task.input_dataset_path or "",
-            str(outdir / "output.h5ad"), str(outdir))
+            str(outdir / "output.h5ad"), str(outdir), seed=task.seed or 42)
         script_path = outdir / "run_scanpy.py"
         script_path.write_text(script, encoding="utf-8")
 
