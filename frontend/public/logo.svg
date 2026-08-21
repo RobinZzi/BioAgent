@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#4f46e5"/>
+    </linearGradient>
+    <linearGradient id="node" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#a5b4fc"/>
+      <stop offset="1" stop-color="#c7d2fe"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 渐变圆角底 -->
+  <rect x="0" y="0" width="64" height="64" rx="15" fill="url(#bg)"/>
+
+  <!-- DNA 双螺旋 -->
+  <g fill="none" stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" opacity="0.95">
+    <!-- 链 A -->
+    <path d="M 20 12 C 44 15, 44 19, 44 22 C 44 25, 20 29, 20 32 C 20 35, 44 39, 44 42 C 44 45, 20 49, 20 52"/>
+    <!-- 链 B -->
+    <path d="M 44 12 C 20 15, 20 19, 20 22 C 20 25, 44 29, 44 32 C 44 35, 20 39, 20 42 C 20 45, 44 49, 44 52"/>
+  </g>
+
+  <!-- 碱基对连接 -->
+  <g stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.7">
+    <line x1="30" y1="17" x2="34" y2="17"/>
+    <line x1="34" y1="27" x2="30" y2="27"/>
+    <line x1="30" y1="37" x2="34" y2="37"/>
+    <line x1="34" y1="47" x2="30" y2="47"/>
+  </g>
+
+  <!-- 中心节点（Agent） -->
+  <circle cx="32" cy="32" r="6.5" fill="url(#node)"/>
+  <circle cx="32" cy="32" r="2.6" fill="#4f46e5"/>
+</svg>

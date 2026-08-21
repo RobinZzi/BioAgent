@@ -138,15 +138,11 @@ a:hover { text-decoration: underline; }
   box-shadow: var(--shadow-xs);
   z-index: 5;
 }
-.topbar .brand { display: flex; align-items: center; gap: 8px; }
-.topbar .logo {
-  width: 22px; height: 22px; border-radius: 6px;
-  background: var(--accent-grad);
-  position: relative; box-shadow: 0 2px 6px rgba(79,70,229,.3);
-}
-.topbar .logo::after {
-  content: ''; position: absolute; inset: 6px;
-  border-radius: 3px; background: rgba(255,255,255,.85);
+.topbar .brand { display: flex; align-items: center; gap: 9px; }
+.topbar .logo-img {
+  width: 26px; height: 26px; border-radius: 7px;
+  box-shadow: 0 2px 8px rgba(79,70,229,.3);
+  display: block;
 }
 .topbar .title { font-size: 14px; font-weight: 700; letter-spacing: -.01em; }
 .topbar .subtitle { color: var(--text-dim); font-size: 12px; }

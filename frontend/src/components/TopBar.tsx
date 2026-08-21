@@ -30,7 +30,7 @@ export default function TopBar({
   return (
     <div className="topbar">
       <span className="brand">
-        <span className="logo" />
+        <img src="/logo.svg" alt="BioAgent" className="logo-img" />
         <span className="title">BioAgent</span>
       </span>
       <span className="subtitle">生信分析工作台</span>
