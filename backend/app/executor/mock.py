@@ -557,6 +557,116 @@ class MockExecutor(BaseExecutor):
                         {"genes": n_genes, "samples": n_samples, "from": "featurecounts"})
             log.append(f"[mock] quantified {n_genes} genes x {n_samples} samples")
 
+        # ------------------------------------------------------------ 更多组学
+        elif cap_id == "scatac.qc":
+            fragments = rng.randint(2000, 20000)
+            tss = round(rng.uniform(4, 15), 1)
+            metrics = {"fragments": fragments, "tss_enrichment": tss,
+                       "min_fragments": params.get("min_fragments")}
+            _write_fig(outdir / "atac_qc.png", "ATAC QC (TSS enrichment)",
+                       lambda ax: ax.hist([rng.uniform(0, 15) for _ in range(300)], bins=30))
+            add_file("figure", "atac_qc.png")
+            _write_html(outdir / "atac_qc_report.html", "scATAC QC 报告",
+                        [("质控指标", _html_table(["指标", "数值"], [
+                            ["fragments", f"{fragments:,}"], ["TSS 富集", f"{tss}"]])),
+                         ("结论", "TSS 富集正常，可进入聚类分析。")])
+            add_file("report", "atac_qc_report.html")
+            add_dataset(f"{input_stem}_atac_qc.h5ad", "scrna", "h5ad", "qc", {"tss": tss})
+            log.append(f"[mock] atac qc: {fragments:,} fragments, TSS={tss}")
+
+        elif cap_id == "scatac.clustering":
+            res = params.get("resolution", 0.8)
+            nc = max(2, int(round(2 + res * 5)))
+            metrics = {"resolution": res, "n_clusters": nc}
+            _write_fig(outdir / "atac_umap.png", f"ATAC UMAP (res={res})",
+                       lambda ax: ax.scatter([rng.gauss(0, 1) for _ in range(500)],
+                                             [rng.gauss(0, 1) for _ in range(500)], s=2, alpha=0.5))
+            add_file("figure", "atac_umap.png")
+            add_dataset(f"{input_stem}_atac_clustered.h5ad", "scrna", "h5ad", "clustered",
+                        {"n_clusters": nc, "resolution": res})
+            log.append(f"[mock] atac clustering -> {nc} clusters")
+
+        elif cap_id == "spatial.qc":
+            spots = rng.randint(2000, 15000)
+            med_genes = rng.randint(200, 800)
+            metrics = {"spots": spots, "median_genes_per_spot": med_genes}
+            _write_fig(outdir / "spatial_qc.png", "Spatial QC",
+                       lambda ax: ax.scatter([rng.gauss(0, 1) for _ in range(500)],
+                                             [rng.gauss(0, 1) for _ in range(500)], s=3, alpha=0.4))
+            add_file("figure", "spatial_qc.png")
+            add_dataset(f"{input_stem}_spatial_qc.h5ad", "scrna", "h5ad", "qc",
+                        {"spots": spots, "median_genes": med_genes})
+            log.append(f"[mock] spatial qc: {spots:,} spots")
+
+        elif cap_id == "spatial.clustering":
+            res = params.get("resolution", 0.5)
+            nc = max(2, int(round(2 + res * 4)))
+            metrics = {"resolution": res, "n_clusters": nc}
+            _write_fig(outdir / "spatial_clusters.png", f"Spatial clusters (res={res})",
+                       lambda ax: ax.scatter([rng.uniform(0, 10) for _ in range(400)],
+                                             [rng.uniform(0, 10) for _ in range(400)], c=rng.randint(0, nc, 400), s=4, cmap="tab10"))
+            add_file("figure", "spatial_clusters.png")
+            add_dataset(f"{input_stem}_spatial_clustered.h5ad", "scrna", "h5ad", "clustered", {"n_clusters": nc})
+            log.append(f"[mock] spatial clustering -> {nc} clusters")
+
+        elif cap_id == "methylation.qc":
+            cpg = rng.randint(400000, 800000)
+            med_beta = round(rng.uniform(0.3, 0.6), 2)
+            metrics = {"cpg_sites": cpg, "median_beta": med_beta}
+            _write_fig(outdir / "methylation_qc.png", "Methylation QC (beta distribution)",
+                       lambda ax: ax.hist([rng.uniform(0, 1) for _ in range(300)], bins=30))
+            add_file("figure", "methylation_qc.png")
+            add_dataset(f"{input_stem}_meth_qc", "bulk_rna", "csv", "qc", {"cpg": cpg, "median_beta": med_beta})
+            log.append(f"[mock] methylation qc: {cpg:,} CpG sites")
+
+        elif cap_id == "methylation.differential":
+            n = rng.randint(1000, 5000)
+            n_sig = int(n * rng.uniform(0.05, 0.2))
+            metrics = {"dmp_tested": n, "significant": n_sig}
+            rows = []
+            for i in range(min(n, 50)):
+                rows.append([f"chr{i % 22}:{rng.randint(1000, 900000)}",
+                             round(rng.uniform(-0.5, 0.5), 3),
+                             f"{10 ** -rng.uniform(0, 6):.2e}"])
+            with open(outdir / "dmp.csv", "w", newline="") as f:
+                w = csv.writer(f); w.writerow(["region", "delta_beta", "padj"]); w.writerows(rows)
+            add_file("csv", "dmp.csv")
+            _write_fig(outdir / "dmp_volcano.png", "DMP volcano",
+                       lambda ax: ax.scatter([rng.gauss(0, 0.2) for _ in range(300)],
+                                             [rng.uniform(0, 8) for _ in range(300)], s=2, alpha=0.5))
+            add_file("figure", "dmp_volcano.png")
+            log.append(f"[mock] methylation DMP: {n_sig} significant")
+
+        elif cap_id == "variant.calling":
+            n_variants = rng.randint(2000, 20000)
+            metrics = {"variants": n_variants, "min_qual": params.get("min_qual")}
+            with open(outdir / "variants.vcf", "w") as f:
+                f.write("##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\n")
+                for i in range(min(n_variants, 100)):
+                    f.write(f"chr{rng.randint(1, 22)}\t{rng.randint(1000, 900000)}\t.\tA\tG\t{rng.randint(10, 90)}\n")
+            add_file("csv", "variants.vcf")
+            _write_html(outdir / "variant_calling_report.html", "变异检测报告",
+                        [("结果", _html_table(["指标", "数值"], [["变异数", f"{n_variants:,}"],
+                                                                    ["最小质量", params.get("min_qual")]]))])
+            add_file("report", "variant_calling_report.html")
+            add_dataset(f"{input_stem}_variants.vcf", "fastq", "vcf", "variants",
+                        {"n_variants": n_variants})
+            log.append(f"[mock] variant calling: {n_variants:,} variants")
+
+        elif cap_id == "variant.annotation":
+            n = rng.randint(500, 5000)
+            db = params.get("db", "clinvar")
+            metrics = {"annotated": n, "database": db}
+            rows = []
+            for i in range(min(n, 50)):
+                rows.append([f"chr{rng.randint(1, 22)}:{rng.randint(1000, 900000)}",
+                             rng.choice(["pathogenic", "benign", "vus"]),
+                             f"gene{rng.randint(1, 500)}"])
+            with open(outdir / "variants_annotated.csv", "w", newline="") as f:
+                w = csv.writer(f); w.writerow(["variant", "clinical", "gene"]); w.writerows(rows)
+            add_file("csv", "variants_annotated.csv")
+            log.append(f"[mock] variant annotation ({db}): {n} annotated")
+
         else:
             log.append(f"[mock] capability {cap_id} 无 mock 实现，返回空结果")
             metrics = {"note": f"no mock implementation for {cap_id}"}

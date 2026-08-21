@@ -101,6 +101,15 @@ def execute_workflow(db: Session, conversation: Conversation, workflow_id: str,
 # ---------------------------------------------------------------- 意图规则
 # (关键词列表, capability_id, 参数缺省, 说明)。顺序即优先级（先匹配先得）。
 INTENT_RULES: list[tuple[list[str], str, dict, str]] = [
+    # 更多组学（置于通用规则前，避免「质控/聚类」误配）
+    (["atac 聚类", "scatac 聚类"], "scatac.clustering", {}, "ATAC 聚类"),
+    (["atac", "scatac", "染色质开放性"], "scatac.qc", {}, "ATAC 质控"),
+    (["空间聚类", "spatial clustering"], "spatial.clustering", {}, "空间聚类"),
+    (["空间转录组", "空间", "spatial"], "spatial.qc", {}, "空间质控"),
+    (["差异甲基化", "dmr", "dmp"], "methylation.differential", {}, "差异甲基化"),
+    (["甲基化", "methylation"], "methylation.qc", {}, "甲基化质控"),
+    (["变异注释", "vep", "clinvar"], "variant.annotation", {}, "变异注释"),
+    (["变异检测", "wes", "wgs", "gatk", "variant"], "variant.calling", {}, "变异检测"),
     (["fastqc", "下机质量", "碱基质量"], "bulk_rna.fastqc", {}, "FastQC 质控"),
     (["mtx", "10x 矩阵", "矩阵导入", "读入矩阵"], "scrna.import_mtx", {}, "10x 矩阵导入"),
     (["cellranger", "10x", "单细胞下机", "下机单细胞"], "scrna.import_10x", {}, "10x 下机导入"),
