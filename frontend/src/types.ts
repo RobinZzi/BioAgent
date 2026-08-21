@@ -174,3 +174,14 @@ export interface MessageResult {
   assistant_message: Message
   events: AnalysisEvent[]
 }
+
+export interface Diagnosis {
+  event_id: string
+  capability_id: string
+  failure_type: string
+  stage: string
+  category: string
+  reason: string
+  suggested_params: Record<string, unknown>
+  message: string
+}

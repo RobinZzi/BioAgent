@@ -69,7 +69,8 @@ export default function ResultColumn({
         )}
 
         {tab === 'dag' && selectedEventId && !compareMode && (
-          <EventDetail eventId={selectedEventId} onClose={() => setSelectedEventId(null)} />
+          <EventDetail eventId={selectedEventId} onClose={() => setSelectedEventId(null)}
+                       onChanged={onRefresh} />
         )}
         {tab === 'dag' && compareMode && compareIds.length >= 2 && (
           <CompareView eventIds={compareIds} onClose={closeCompare} />

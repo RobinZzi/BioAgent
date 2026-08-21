@@ -1,7 +1,7 @@
 // API 封装（fetch）
 import type {
   AgentStatus, AnalysisEvent, Artifact, Capability, Conversation, ConversationDetail,
-  Dag, Dataset, Environment, MessageResult, Project, ProjectDetail,
+  Dag, Dataset, Diagnosis, Environment, MessageResult, Project, ProjectDetail,
   ResolveResult, Settings,
 } from './types'
 
@@ -77,6 +77,8 @@ export const api = {
   eventLogs: (id: string) => req<{ event_id: string; logs: string }>(`/events/${id}/logs`),
   rerunEvent: (id: string, parameters: Record<string, unknown> = {}) =>
     req<AnalysisEvent>(`/events/${id}/rerun`, { method: 'POST', body: JSON.stringify({ parameters }) }),
+  diagnoseEvent: (id: string) =>
+    req<Diagnosis>(`/events/${id}/diagnose`, { method: 'POST' }),
 
   // artifacts
   artifacts: (projectId: string) => req<Artifact[]>(`/projects/${projectId}/artifacts`),

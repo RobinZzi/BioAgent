@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import type { AnalysisEvent } from '../types'
+import type { AnalysisEvent, Diagnosis } from '../types'
 
 const CAP_LABEL: Record<string, string> = {
   'scrna.inspect': '数据检查', 'scrna.qc': '细胞 QC', 'scrna.normalization': '标准化',
@@ -13,18 +13,24 @@ const CAP_LABEL: Record<string, string> = {
   'bulk_rna.alignment': '序列比对',
 }
 
-export default function EventDetail({ eventId, onClose }: {
+export default function EventDetail({ eventId, onClose, onChanged }: {
   eventId: string
   onClose: () => void
+  onChanged?: () => void
 }) {
   const [ev, setEv] = useState<AnalysisEvent | null>(null)
   const [logs, setLogs] = useState('')
   const [showLogs, setShowLogs] = useState(false)
+  const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null)
+  const [showDiagnosis, setShowDiagnosis] = useState(false)
+  const [diagnosing, setDiagnosing] = useState(false)
+  const [rerunning, setRerunning] = useState(false)
 
   useEffect(() => {
     setEv(null)
     setShowLogs(false)
     setLogs('')
+    setDiagnosis(null)
     api.event(eventId).then(setEv).catch(console.error)
   }, [eventId])
 
@@ -35,6 +41,25 @@ export default function EventDetail({ eventId, onClose }: {
       const r = await api.eventLogs(eventId)
       setLogs(r.logs)
     }
+  }
+
+  const diagnose = async () => {
+    setDiagnosing(true)
+    try {
+      const d = await api.diagnoseEvent(eventId)
+      setDiagnosis(d)
+      setShowDiagnosis(true)
+    } catch (e) { alert((e as Error).message) } finally { setDiagnosing(false) }
+  }
+
+  const rerunWithSuggested = async () => {
+    if (!diagnosis) return
+    setRerunning(true)
+    try {
+      await api.rerunEvent(eventId, diagnosis.suggested_params)
+      alert('已用建议参数重跑，新事件挂到 DAG（re_run 边）。')
+      onChanged?.()
+    } catch (e) { alert((e as Error).message) } finally { setRerunning(false) }
   }
 
   if (!ev) return <div className="empty">加载事件…</div>
@@ -54,8 +79,30 @@ export default function EventDetail({ eventId, onClose }: {
 
       {ev.error && (
         <div className="card" style={{ background: 'var(--red-soft)', borderColor: 'var(--red)', marginBottom: 10 }}>
-          <b style={{ color: 'var(--red)' }}>执行失败：{ev.error.message}</b>
-          {ev.error.stage && <div className="muted">stage: {ev.error.stage} · type: {ev.error.type}</div>}
+          <div className="flex" style={{ alignItems: 'flex-start' }}>
+            <div style={{ flex: 1 }}>
+              <b style={{ color: 'var(--red)' }}>执行失败：{ev.error.message}</b>
+              {ev.error.stage && <div className="muted">stage: {ev.error.stage} · type: {ev.error.type}</div>}
+            </div>
+            <button onClick={diagnose} disabled={diagnosing}>
+              {diagnosing ? '诊断中…' : '诊断原因'}
+            </button>
+          </div>
+          {showDiagnosis && diagnosis && (
+            <div style={{ marginTop: 10, background: 'var(--panel)', borderRadius: 8, padding: 10 }}>
+              <div style={{ marginBottom: 6 }}>{diagnosis.message}</div>
+              {Object.keys(diagnosis.suggested_params).length > 0 && (
+                <div className="mono muted" style={{ marginBottom: 8 }}>
+                  建议参数：{JSON.stringify(diagnosis.suggested_params)}
+                </div>
+              )}
+              {Object.keys(diagnosis.suggested_params).length > 0 && (
+                <button className="primary" onClick={rerunWithSuggested} disabled={rerunning}>
+                  {rerunning ? '重跑中…' : '用建议参数重跑'}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 

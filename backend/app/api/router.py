@@ -616,6 +616,14 @@ def rerun_event(event_id: str, body: RerunBody, db: Session = Depends(get_db)):
     return _event_out(ev, db)
 
 
+@router.post("/events/{event_id}/diagnose")
+def diagnose_event(event_id: str, db: Session = Depends(get_db)):
+    """失败诊断：分析失败原因 + 参数修正建议（错误恢复循环）。"""
+    ev = _get_event(db, event_id)
+    from ..services.diagnostics import diagnose_failure
+    return diagnose_failure(ev)
+
+
 @router.get("/projects/{project_id}/dag", response_model=DagOut)
 def project_dag(project_id: str, db: Session = Depends(get_db)):
     _get_project(db, project_id)
