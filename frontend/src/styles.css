@@ -434,3 +434,6 @@ button.primary.danger { background: linear-gradient(135deg, #ef4444, #dc2626); b
 .login-logo { text-align: center; margin-bottom: 18px; }
 .login-logo h1 { font-size: 20px; margin: 8px 0 2px; }
 .login-error { color: var(--red); font-size: 12px; margin-bottom: 10px; }
+
+/* 项目类型图标 */
+.proj-icon { display: inline-flex; align-items: center; vertical-align: -2px; margin-right: 7px; color: var(--text-dim); }

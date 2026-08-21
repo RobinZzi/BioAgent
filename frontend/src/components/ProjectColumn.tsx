@@ -3,6 +3,24 @@ import { api } from '../api'
 import type { Project } from '../types'
 import NewProjectModal from './NewProjectModal'
 
+function LocalIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+      <rect x="2" y="3" width="12" height="7" rx="1.2" />
+      <path d="M6 12h4M8 10v2" />
+    </svg>
+  )
+}
+function ServerIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+      <rect x="2" y="2" width="12" height="4.5" rx="1.2" />
+      <rect x="2" y="9.5" width="12" height="4.5" rx="1.2" />
+      <path d="M5 4.2h.01M5 11.7h.01M8 4.2h.01M8 11.7h.01" />
+    </svg>
+  )
+}
+
 const DTYPE_LABEL: Record<string, string> = { local: '本地', remote: '服务器' }
 
 export default function ProjectColumn({
@@ -68,6 +86,7 @@ export default function ProjectColumn({
                  onChange={() => toggleSelect(p.id)}
                  onClick={(e) => e.stopPropagation()} />
         )}
+        <span className="proj-icon">{p.data_source === 'remote' ? <ServerIcon /> : <LocalIcon />}</span>
         {p.name}
       </div>
       <div className="meta">
