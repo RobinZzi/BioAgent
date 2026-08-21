@@ -1,3 +1,5 @@
+<p align="center"><img src="logo.svg" alt="BioAgent" width="72" /></p>
+
 <p align="center">
   <a href="README.zh.md"><img src="https://img.shields.io/badge/中文-简体中文-blue?style=for-the-badge" alt="中文版"></a>
   <a href="README.en.md"><img src="https://img.shields.io/badge/English-README-blue?style=for-the-badge" alt="English"></a>
