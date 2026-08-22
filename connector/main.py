@@ -19,7 +19,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "backend"))
 
-from fastapi import Depends, FastAPI  # noqa: E402
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile  # noqa: E402
+from fastapi.responses import FileResponse  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 from app.capabilities.definitions import get_capability  # noqa: E402
@@ -58,6 +59,34 @@ def discover(_=Depends(require_token)):
     return manifest.model_dump()
 
 
+@app.post("/upload/{task_id}/{filename}")
+async def upload(task_id: str, filename: str, file: UploadFile = File(...),
+                 _=Depends(require_token)):
+    """后端把输入文件推送到 Connector（跨机数据映射）。"""
+    if "/" in filename or ".." in filename:
+        raise HTTPException(400, "非法文件名")
+    d = _CONNECTOR_WORK / task_id / "inputs"
+    d.mkdir(parents=True, exist_ok=True)
+    dest = d / filename
+    with open(dest, "wb") as f:
+        f.write(await file.read())
+    return {"ok": True, "remote_path": str(dest)}
+
+
+@app.get("/artifacts/{task_id}/{filename}")
+def artifact(task_id: str, filename: str, _=Depends(require_token)):
+    """后端从 Connector 下载产物。"""
+    if "/" in filename or ".." in filename:
+        raise HTTPException(400, "非法文件名")
+    base = _CONNECTOR_WORK / task_id
+    p = base / filename
+    if not str(p.resolve()).startswith(str(_CONNECTOR_WORK.resolve())):
+        raise HTTPException(400, "非法路径")
+    if not p.exists():
+        raise HTTPException(404, f"产物不存在: {filename}")
+    return FileResponse(p, filename=filename)
+
+
 @app.post("/execute")
 def execute(body: ExecuteRequest, _=Depends(require_token)):
     task = TaskSpec(**body.task)
@@ -78,8 +107,10 @@ def execute(body: ExecuteRequest, _=Depends(require_token)):
 
     # 替换输出目录为 Connector 本地工作区
     task.output_dir = str(job_dir)
+    # 输入解析：同机路径可用；否则用已上传到 inputs/ 的文件
     if task.input_dataset_path and not Path(task.input_dataset_path).exists():
-        task.input_dataset_path = None  # 远端路径不可达：由 Connector 侧数据映射处理
+        uploaded = _CONNECTOR_WORK / task.task_id / "inputs" / Path(task.input_dataset_path).name
+        task.input_dataset_path = str(uploaded) if uploaded.exists() else None
 
     result = executor.execute(task, capability)
     return result.to_dict()
