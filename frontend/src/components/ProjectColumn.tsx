@@ -86,8 +86,10 @@ export default function ProjectColumn({
 
   const renderItem = (p: Project) => (
     <div key={p.id}
+         tabIndex={0}
          className={`project-item ${p.id === currentId ? 'active' : ''} ${selected.includes(p.id) ? 'selected' : ''}`}
-         onClick={() => manage ? toggleSelect(p.id) : onSelect(p.id)}>
+         onClick={() => manage ? toggleSelect(p.id) : onSelect(p.id)}
+         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); manage ? toggleSelect(p.id) : onSelect(p.id) } }}>
       <div className="name">
         {manage && (
           <input type="checkbox" style={{ marginRight: 8 }}
@@ -124,16 +126,16 @@ export default function ProjectColumn({
         {manage ? (
           <>
             <span className="muted">{t('selectedCount')} {selected.length}</span>
-            <button className="danger" style={{ padding: '2px 8px', fontSize: 12 }}
+            <button className="tool-btn danger"
                     disabled={selected.length === 0}
                     onClick={() => setConfirmOpen(true)}>{t('delete')}</button>
-            <button className="ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={exitManage}>{t('cancel')}</button>
+            <button className="tool-btn" onClick={exitManage}>{t('cancel')}</button>
           </>
         ) : (
           <>
-            <button className="ghost" style={{ padding: '2px 8px', fontSize: 12 }}
+            <button className="tool-btn"
                     onClick={() => setShowModal(true)}>{t('new')}</button>
-            <button className="ghost" style={{ padding: '2px 8px', fontSize: 12 }}
+            <button className="tool-btn"
                     onClick={() => setManage(true)}>{t('manage')}</button>
           </>
         )}

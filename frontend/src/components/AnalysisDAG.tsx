@@ -97,7 +97,15 @@ export default function AnalysisDAG({
       <div className="dag-layers">
         {layers.map((layer, depth) => (
           <div key={depth} style={{ display: 'contents' }}>
-            {depth > 0 && <div className="dag-layer-arrow" aria-hidden="true" />}
+            {depth > 0 && (
+              <div className="dag-layer-arrow" aria-hidden="true">
+                <span className="line" />
+                <svg viewBox="0 0 10 12" width="8" height="12" fill="none"
+                     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M2 1l6 5-6 5" />
+                </svg>
+              </div>
+            )}
             <div className="dag-layer">
               <div className="dag-layer-label">{t('step')} {depth}</div>
               {layer.map((n) => (
@@ -111,6 +119,7 @@ export default function AnalysisDAG({
                              onChange={() => onToggleCompare(n.id)}
                              onClick={(e) => e.stopPropagation()} />
                     )}
+                    <span className={`status-dot ${statusClass(n.status)}`} aria-hidden="true" />
                     {capLabel(n.capability_id, lang)}
                   </div>
                   <div className="meta">

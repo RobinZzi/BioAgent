@@ -62,11 +62,11 @@ export default function TopBar({
         ))}
       </select>
 
-      <button className="ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}>
+      <button className="tool-btn" onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}>
         {lang === 'zh' ? 'EN' : '中'}
       </button>
-      <button className="ghost" onClick={onRefresh} title={t('refresh')}>{t('refresh')}</button>
-      <button onClick={onOpenSettings} title="Modes / Agent / Env / API">{t('settings')}</button>
+      <button className="tool-btn" onClick={onRefresh} title={t('refresh')}>{t('refresh')}</button>
+      <button onClick={onOpenSettings} title={t('settings')}>{t('settings')}</button>
     </div>
   )
 }

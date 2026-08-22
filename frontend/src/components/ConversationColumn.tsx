@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import { useI18n } from '../i18n'
 import type { Message } from '../types'
@@ -25,6 +25,12 @@ export default function ConversationColumn({
 }) {
   const { t } = useI18n()
   const [text, setText] = useState('')
+  const listRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = listRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [messages.length, busy])
 
   const send = async (content: string) => {
     if (!convId || !content.trim() || busy) return
@@ -45,7 +51,7 @@ export default function ConversationColumn({
         <span className="muted mono" style={{ marginLeft: 'auto' }}>{convId?.slice(0, 12) ?? ''}</span>
       </div>
 
-      <div className="conv-messages">
+      <div className="conv-messages" ref={listRef}>
         {messages.length === 0 && (
           <div className="empty">
             {t('noMessages')}
@@ -58,7 +64,8 @@ export default function ConversationColumn({
           </div>
         ))}
         {busy && (
-          <div className="msg assistant">
+          <div className="msg assistant analyzing">
+            <span className="dot-anim" aria-hidden="true"><i /><i /><i /></span>
             {t('analyzing')}
           </div>
         )}
@@ -78,6 +85,7 @@ export default function ConversationColumn({
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(text) }
           }}
+          rows={1}
         />
         <button className="primary" disabled={busy || !text.trim()} onClick={() => send(text)}>{t('send')}</button>
       </div>
