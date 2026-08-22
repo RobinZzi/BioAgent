@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import type { Capability, Environment, ResolveResult, Settings } from '../types'
+import { useI18n } from '../i18n'
 
 const EXECUTOR_MODES = [
   { id: 'mock', label: 'mock', desc: '预生成合理产物，无生信环境也能完整演示' },
@@ -24,6 +25,7 @@ export default function SettingsPanel({
   onRefreshSettings: () => void
   onRefreshDetail: () => void
 }) {
+  const { t } = useI18n()
   const [caps, setCaps] = useState<Capability[]>([])
   const [selCap, setSelCap] = useState('scrna.clustering')
   const [resolve, setResolve] = useState<ResolveResult | null>(null)
@@ -132,7 +134,7 @@ export default function SettingsPanel({
 
         <div className="settings-body">
           <div className="settings-section">
-            <h4>工作模式（执行器）</h4>
+            <h4>{t('workMode')}</h4>
             <div className="mode-group">
               {EXECUTOR_MODES.map((m) => (
                 <button key={m.id} title={m.desc}
@@ -148,7 +150,7 @@ export default function SettingsPanel({
           </div>
 
           <div className="settings-section">
-            <h4>Agent 模式</h4>
+            <h4>{t('agentMode')}</h4>
             <div className="mode-group">
               {LLM_MODES.map((m) => (
                 <button key={m.id} title={m.desc}
@@ -166,7 +168,7 @@ export default function SettingsPanel({
           </div>
 
           <div className="settings-section">
-            <h4>LLM API Key</h4>
+            <h4>{t('llmApiKey')}</h4>
             <div className="muted" style={{ marginBottom: 8 }}>
               配置 OpenAI 兼容 API（默认 DeepSeek）。Key 仅保存在本机后端数据目录，不会返回前端明文。
               状态：{settings?.llm_configured ? '已配置' : '未配置'}
@@ -193,7 +195,7 @@ export default function SettingsPanel({
           </div>
 
           <div className="settings-section">
-            <h4>计算环境</h4>
+            <h4>{t('computeEnv')}</h4>
             <div className="flex" style={{ marginBottom: 10 }}>
               <button className="primary" onClick={discover} disabled={busy || !projectId}>
                 {busy ? '发现中…' : '本机环境发现'}
@@ -271,7 +273,7 @@ export default function SettingsPanel({
           </div>
 
           <div className="settings-section">
-            <h4>能力解析（Tool → Capability）</h4>
+            <h4>{t('capabilityResolve')}</h4>
             <div className="flex">
               <select value={selCap} onChange={(e) => setSelCap(e.target.value)} style={{ flex: 1 }}>
                 {caps.map((c) => (
@@ -299,7 +301,7 @@ export default function SettingsPanel({
           </div>
 
           <div className="settings-section">
-            <h4>系统</h4>
+            <h4>{t('system')}</h4>
             <div className="muted">
               认证模式：{settings?.auth_enabled
                 ? '已开启（注册/登录，适合共享服务器部署）'
@@ -309,7 +311,7 @@ export default function SettingsPanel({
           </div>
 
           <div className="settings-section">
-            <h4>API</h4>
+            <h4>{t('api')}</h4>
             <div className="muted">
               接口文档：<a href="http://127.0.0.1:8000/docs" target="_blank" rel="noreferrer">Swagger UI</a> ·
               <a href="http://127.0.0.1:8000/api/health" target="_blank" rel="noreferrer"> health</a>

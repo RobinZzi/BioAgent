@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ProjectDetail } from '../types'
+import { useI18n } from '../i18n'
 import type { ResultTab } from '../App'
 import AnalysisDAG from './AnalysisDAG'
 import ArtifactGallery from './ArtifactGallery'
@@ -19,13 +20,14 @@ export default function ResultColumn({
   onRefresh: () => void
 }) {
   const [compareMode, setCompareMode] = useState(false)
+  const { t } = useI18n()
   const [compareIds, setCompareIds] = useState<string[]>([])
 
   if (!detail) {
     return (
       <div className="col">
-        <div className="col-header"><span>历史结果</span></div>
-        <div className="empty">选择一个项目查看分析历史。</div>
+        <div className="col-header"><span>{t('resultTabs')}</span></div>
+        <div className="empty">{t('noProject')}</div>
       </div>
     )
   }
@@ -44,9 +46,9 @@ export default function ResultColumn({
   return (
     <div className="col">
       <div className="result-tabs">
-        <button className={tab === 'dag' ? 'active' : ''} onClick={() => setTab('dag')}>历史 DAG</button>
-        <button className={tab === 'artifacts' ? 'active' : ''} onClick={() => setTab('artifacts')}>产物</button>
-        <button className={tab === 'datasets' ? 'active' : ''} onClick={() => setTab('datasets')}>数据集</button>
+        <button className={tab === 'dag' ? 'active' : ''} onClick={() => setTab('dag')}>{t('resultTabs')}</button>
+        <button className={tab === 'artifacts' ? 'active' : ''} onClick={() => setTab('artifacts')}>{t('artifacts')}</button>
+        <button className={tab === 'datasets' ? 'active' : ''} onClick={() => setTab('datasets')}>{t('datasetsTab')}</button>
       </div>
 
       <div className="col-body">

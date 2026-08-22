@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import type { Environment } from '../types'
+import { useI18n } from '../i18n'
 
 export default function NewProjectModal({
   onClose, onCreate, onAddServer,
@@ -9,6 +10,7 @@ export default function NewProjectModal({
   onCreate: (name: string, category: 'local' | 'remote', workdir: string, serverId: string) => void
   onAddServer: (env: Environment) => void
 }) {
+  const { t } = useI18n()
   const [name, setName] = useState('')
   const [category, setCategory] = useState<'local' | 'remote'>('local')
   const [servers, setServers] = useState<Environment[]>([])
@@ -34,57 +36,57 @@ export default function NewProjectModal({
   return (
     <div className="settings-overlay" onClick={onClose}>
       <div className="confirm-panel" style={{ width: 460 }} onClick={(e) => e.stopPropagation()}>
-        <b>新建项目</b>
+        <b>{t('createProject')}</b>
         <div style={{ marginTop: 14 }}>
-          <input placeholder="项目名称（如 HCC Single-cell Analysis）" value={name}
+          <input placeholder={t("projectName")} value={name}
                  onChange={(e) => setName(e.target.value)} autoFocus style={{ width: '100%' }} />
         </div>
 
         <div style={{ margin: '14px 0 10px' }}>
-          <div className="muted" style={{ marginBottom: 6 }}>项目类别</div>
+          <div className="muted" style={{ marginBottom: 6 }}>{t('projectCategory')}</div>
           <div className="mode-group">
-            <button className={category === 'local' ? 'active' : ''} onClick={() => setCategory('local')}>本地项目</button>
-            <button className={category === 'remote' ? 'active' : ''} onClick={() => setCategory('remote')}>服务器端项目</button>
+            <button className={category === 'local' ? 'active' : ''} onClick={() => setCategory('local')}>{t('localProject')}</button>
+            <button className={category === 'remote' ? 'active' : ''} onClick={() => setCategory('remote')}>{t('remoteProject')}</button>
           </div>
         </div>
 
         {category === 'local' && (
           <div style={{ marginBottom: 14 }}>
-            <div className="muted" style={{ marginBottom: 6 }}>工作区文件夹（用于存放分析产物）</div>
+            <div className="muted" style={{ marginBottom: 6 }}>{t('workdir')}（用于存放分析产物）</div>
             <div className="flex">
-              <input placeholder="/path/to/workspace" value={workdir}
+              <input placeholder={t("workdir")} value={workdir}
                      onChange={(e) => setWorkdir(e.target.value)} style={{ flex: 1 }} />
-              <button onClick={() => setShowPicker(!showPicker)}>浏览</button>
+              <button onClick={() => setShowPicker(!showPicker)}>{t('browse')}</button>
             </div>
-            <div className="muted" style={{ marginTop: 4 }}>可浏览选择已存在的目录，或输入路径后自动创建。</div>
+            <div className="muted" style={{ marginTop: 4 }}>{t("browseHint")}</div>
             {showPicker && <DirPicker onPick={(p) => { setWorkdir(p); setShowPicker(false) }} />}
           </div>
         )}
 
         {category === 'remote' && (
           <div style={{ marginBottom: 14 }}>
-            <div className="muted" style={{ marginBottom: 6 }}>服务器</div>
+            <div className="muted" style={{ marginBottom: 6 }}>{t('server')}</div>
             <div className="flex">
               <select value={serverId} onChange={(e) => setServerId(e.target.value)} style={{ flex: 1 }}>
-                <option value="">选择已链接的服务器</option>
+                <option value="">{t("selectServer")}</option>
                 {servers.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name || '未命名服务器'}（{s.ssh_host || s.connector_url || 'Connector'}）
                   </option>
                 ))}
               </select>
-              <button onClick={() => setShowAddServer(!showAddServer)}>添加新服务器</button>
+              <button onClick={() => setShowAddServer(!showAddServer)}>{t('addServer')}</button>
             </div>
             {showAddServer && <AddServerForm onAdded={(env) => { setServers([env, ...servers]); setServerId(env.id); setShowAddServer(false) }} />}
-            <div className="muted" style={{ margin: '10px 0 6px' }}>工作区目录名（服务器上）</div>
+            <div className="muted" style={{ margin: '10px 0 6px' }}>{t('serverWorkdir')}</div>
             <input placeholder="如 /data/bioagent/project_xxx 或相对路径" value={serverWorkdir}
                    onChange={(e) => setServerWorkdir(e.target.value)} style={{ width: '100%' }} />
           </div>
         )}
 
         <div className="flex" style={{ justifyContent: 'flex-end' }}>
-          <button onClick={onClose}>取消</button>
-          <button className="primary" onClick={submit} disabled={!name.trim() || (category === 'remote' && !serverId)}>创建</button>
+          <button onClick={onClose}>{t('cancel')}</button>
+          <button className="primary" onClick={submit} disabled={!name.trim() || (category === 'remote' && !serverId)}>{t('create')}</button>
         </div>
       </div>
     </div>
@@ -119,6 +121,7 @@ function DirPicker({ onPick }: { onPick: (p: string) => void }) {
 }
 
 function AddServerForm({ onAdded }: { onAdded: (env: Environment) => void }) {
+  const { t } = useI18n()
   const [mode, setMode] = useState<'ssh' | 'connector'>('ssh')
   const [form, setForm] = useState({ name: 'HPC', host: '', port: '22', user: '', password: '', key_path: '', connector_url: '', token: '' })
   const [busy, setBusy] = useState(false)
@@ -144,17 +147,17 @@ function AddServerForm({ onAdded }: { onAdded: (env: Environment) => void }) {
   return (
     <div className="card" style={{ marginTop: 8 }}>
       <div className="mode-group" style={{ marginBottom: 8 }}>
-        <button className={mode === 'ssh' ? 'active' : ''} onClick={() => setMode('ssh')}>SSH 服务器</button>
+        <button className={mode === 'ssh' ? 'active' : ''} onClick={() => setMode('ssh')}>{t('sshServer')}</button>
         <button className={mode === 'connector' ? 'active' : ''} onClick={() => setMode('connector')}>Connector</button>
       </div>
       <div className="create-form">
-        <input placeholder="服务器名（如 Lab HPC）" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        <input placeholder={t("serverName")} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         {mode === 'ssh' ? (
           <>
-            <input placeholder="服务器地址" value={form.host} onChange={(e) => setForm({ ...form, host: e.target.value })} />
-            <input placeholder="端口" value={form.port} style={{ width: 70 }} onChange={(e) => setForm({ ...form, port: e.target.value })} />
-            <input placeholder="账号" value={form.user} onChange={(e) => setForm({ ...form, user: e.target.value })} />
-            <input type="password" placeholder="密码" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+            <input placeholder={t("serverHost")} value={form.host} onChange={(e) => setForm({ ...form, host: e.target.value })} />
+            <input placeholder={t("port")} value={form.port} style={{ width: 70 }} onChange={(e) => setForm({ ...form, port: e.target.value })} />
+            <input placeholder={t("account")} value={form.user} onChange={(e) => setForm({ ...form, user: e.target.value })} />
+            <input type="password" placeholder={t("password")} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
           </>
         ) : (
           <>

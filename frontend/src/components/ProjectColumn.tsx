@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { api } from '../api'
 import type { Project } from '../types'
 import NewProjectModal from './NewProjectModal'
+import { useI18n } from '../i18n'
 
 function LocalIcon() {
   return (
@@ -33,6 +34,7 @@ export default function ProjectColumn({
   onDelete: (ids: string[], deleteFiles: boolean) => void
   onRefresh: () => void
 }) {
+  const { t } = useI18n()
   const [showModal, setShowModal] = useState(false)
   const [manage, setManage] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
@@ -66,7 +68,7 @@ export default function ProjectColumn({
   }
 
   const rename = async (p: Project) => {
-    const name = window.prompt('重命名项目', p.name)
+    const name = window.prompt(t('rename'), p.name)
     if (!name || name.trim() === p.name) return
     try {
       await api.patchProject(p.id, { name: name.trim() })
@@ -75,7 +77,7 @@ export default function ProjectColumn({
   }
 
   const reposition = async (p: Project) => {
-    const wd = window.prompt('重定位工作区（本地绝对路径 / 服务器目录名）', p.workdir ?? '')
+    const wd = window.prompt(t('reposition'), p.workdir ?? '')
     if (wd === null) return
     try {
       await api.patchProject(p.id, { workdir: wd.trim() })
@@ -98,7 +100,7 @@ export default function ProjectColumn({
       </div>
       <div className="meta">
         <span className="badge gray">{DTYPE_LABEL[p.data_source] ?? p.data_source}</span>
-        {p.n_datasets} 数据集 · {p.n_events} 事件
+        {p.n_datasets} {t('datasets')} · {p.n_events} {t('events')}
         {p.data_source === 'remote' && p.server_host && (
           <span className="mono muted" style={{ display: 'block', marginTop: 2 }}>
             {p.server_name} · {p.server_host}
@@ -108,8 +110,8 @@ export default function ProjectColumn({
       </div>
       {manage && selected.includes(p.id) && selected.length === 1 && (
         <div className="actions" style={{ marginTop: 6, display: 'flex', gap: 6 }}>
-          <button className="ghost" style={{ fontSize: 11 }} onClick={(e) => { e.stopPropagation(); rename(p) }}>重命名</button>
-          <button className="ghost" style={{ fontSize: 11 }} onClick={(e) => { e.stopPropagation(); reposition(p) }}>重定位</button>
+          <button className="ghost" style={{ fontSize: 11 }} onClick={(e) => { e.stopPropagation(); rename(p) }}>{t('rename')}</button>
+          <button className="ghost" style={{ fontSize: 11 }} onClick={(e) => { e.stopPropagation(); reposition(p) }}>{t('reposition')}</button>
         </div>
       )}
     </div>
@@ -122,29 +124,29 @@ export default function ProjectColumn({
         <span className="spacer" />
         {manage ? (
           <>
-            <span className="muted">已选 {selected.length}</span>
+            <span className="muted">{t('selectedCount')} {selected.length}</span>
             <button className="danger" style={{ padding: '2px 8px', fontSize: 12 }}
                     disabled={selected.length === 0}
-                    onClick={() => setConfirmOpen(true)}>删除</button>
-            <button className="ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={exitManage}>取消</button>
+                    onClick={() => setConfirmOpen(true)}>{t('delete')}</button>
+            <button className="ghost" style={{ padding: '2px 8px', fontSize: 12 }} onClick={exitManage}>{t('cancel')}</button>
           </>
         ) : (
           <>
             <button className="ghost" style={{ padding: '2px 8px', fontSize: 12 }}
-                    onClick={() => setShowModal(true)}>新建</button>
+                    onClick={() => setShowModal(true)}>{t('new')}</button>
             <button className="ghost" style={{ padding: '2px 8px', fontSize: 12 }}
-                    onClick={() => setManage(true)}>管理</button>
+                    onClick={() => setManage(true)}>{t('manage')}</button>
           </>
         )}
       </div>
 
       <div className="col-body">
         {local.length > 0 && (
-          <div className="group-header"><span className="group-icon"><LocalIcon /></span>本地项目</div>
+          <div className="group-header"><span className="group-icon"><LocalIcon /></span>{t('localProjects')}</div>
         )}
         <div className="project-list">{local.map(renderItem)}</div>
         {remote.length > 0 && (
-          <div className="group-header"><span className="group-icon"><ServerIcon /></span>服务器端项目</div>
+          <div className="group-header"><span className="group-icon"><ServerIcon /></span>{t('remoteProjects')}</div>
         )}
         {[...remoteGroups.entries()].map(([serverKey, items]) => (
           <div key={serverKey}>
@@ -155,7 +157,7 @@ export default function ProjectColumn({
           </div>
         ))}
         {projects.length === 0 && (
-          <div className="empty">暂无项目，点击「新建」创建。</div>
+          <div className="empty">{t('noProjects')}</div>
         )}
       </div>
 
@@ -170,18 +172,18 @@ export default function ProjectColumn({
       {confirmOpen && (
         <div className="settings-overlay" onClick={() => setConfirmOpen(false)}>
           <div className="confirm-panel" onClick={(e) => e.stopPropagation()}>
-            <b>删除 {selected.length} 个项目？</b>
+            <b>{t('delete')} {selected.length} {t('projects')}？</b>
             <div className="muted" style={{ margin: '6px 0 10px' }}>
-              将删除：{selected.map((id) => projects.find((p) => p.id === id)?.name).join('、')}
+              {t('delete')}: {selected.map((id) => projects.find((p) => p.id === id)?.name).join('、')}
             </div>
             <label className="flex" style={{ marginBottom: 14 }}>
               <input type="checkbox" checked={deleteFiles}
                      onChange={(e) => setDeleteFiles(e.target.checked)} />
-              <span>同时删除 log 和已生成的图片/产物文件（不可恢复）</span>
+              <span>{t('deleteFilesNote')}</span>
             </label>
             <div className="flex" style={{ justifyContent: 'flex-end' }}>
-              <button onClick={() => setConfirmOpen(false)}>取消</button>
-              <button className="primary danger" onClick={doDelete}>确认删除</button>
+              <button onClick={() => setConfirmOpen(false)}>{t('cancel')}</button>
+              <button className="primary danger" onClick={doDelete}>{t('confirmDelete')}</button>
             </div>
           </div>
         </div>

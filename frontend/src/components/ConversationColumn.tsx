@@ -1,16 +1,17 @@
 import { useState } from 'react'
 import { api } from '../api'
+import { useI18n } from '../i18n'
 import type { Message } from '../types'
 
 const QUICK = [
-  ['完整分析', '做完整分析'],
-  ['数据检查', '帮我看看这个数据质量'],
+  ['fullAnalysis', '做完整分析'],
+  ['dataCheck', '帮我看看这个数据质量'],
   ['QC', 'QC'],
-  ['聚类', '聚类，分辨率 0.5'],
-  ['注释', '注释细胞类型'],
+  ['clustering', '聚类，分辨率 0.5'],
+  ['annotation', '注释细胞类型'],
   ['UMAP', 'umap'],
-  ['差异表达', '差异表达'],
-  ['继续', '继续'],
+  ['deAnalysis', '差异表达'],
+  ['continue', '继续'],
 ]
 
 export default function ConversationColumn({
@@ -22,6 +23,7 @@ export default function ConversationColumn({
   onSendStart: () => void
   onRefresh: () => void
 }) {
+  const { t } = useI18n()
   const [text, setText] = useState('')
 
   const send = async (content: string) => {
@@ -39,14 +41,14 @@ export default function ConversationColumn({
   return (
     <div className="col">
       <div className="col-header">
-        <span>对话</span>
+        <span>{t('conversation')}</span>
         <span className="muted mono" style={{ marginLeft: 'auto' }}>{convId?.slice(0, 12) ?? ''}</span>
       </div>
 
       <div className="conv-messages">
         {messages.length === 0 && (
           <div className="empty">
-            与 BioAgent 对话，用自然语言描述分析需求，例如「聚类，分辨率 1.0」。
+            {t('noMessages')}
           </div>
         )}
         {messages.map((m) => (
@@ -57,27 +59,27 @@ export default function ConversationColumn({
         ))}
         {busy && (
           <div className="msg assistant">
-            分析执行中，事件进度见历史面板…
+            {t('analyzing')}
           </div>
         )}
       </div>
 
       <div className="quick-actions">
         {QUICK.map(([label, phrase]) => (
-          <button key={label} disabled={busy} onClick={() => send(phrase)}>{label}</button>
+          <button key={label} disabled={busy} onClick={() => send(phrase)}>{t(label)}</button>
         ))}
       </div>
 
       <div className="conv-input">
         <textarea
-          placeholder="描述分析需求…（QC / 聚类 / 注释 / UMAP / 差异表达 / 继续）"
+          placeholder={t('inputPlaceholder')}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(text) }
           }}
         />
-        <button className="primary" disabled={busy || !text.trim()} onClick={() => send(text)}>发送</button>
+        <button className="primary" disabled={busy || !text.trim()} onClick={() => send(text)}>{t('send')}</button>
       </div>
     </div>
   )
