@@ -112,7 +112,7 @@ export default function SettingsPanel({
     setTesting(envId)
     try {
       const r = await api.testEnvironment(envId)
-      alert(`${r.ok ? '连通正常' : '不可用'}：${r.detail}`)
+      alert(`${r.ok ? t('testOk') : t('testBad')}：${r.detail}`)
     } catch (e) { alert((e as Error).message) } finally { setTesting(null) }
   }
 
@@ -126,10 +126,10 @@ export default function SettingsPanel({
     <div className="settings-overlay" onClick={onClose}>
       <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
         <div className="settings-header">
-          <span>设置</span>
-          <span className="muted">工作模式 · Agent · 环境 · API</span>
+          <span>{t('settings')}</span>
+          <span className="muted">{t('settingsSubtitle')}</span>
           <span className="spacer" />
-          <button className="ghost" onClick={onClose}>关闭</button>
+          <button className="ghost" onClick={onClose}>{t('close')}</button>
         </div>
 
         <div className="settings-body">
@@ -137,7 +137,7 @@ export default function SettingsPanel({
             <h4>{t('workMode')}</h4>
             <div className="mode-group">
               {EXECUTOR_MODES.map((m) => (
-                <button key={m.id} title={m.desc}
+                <button key={m.id} title={t(m.id + 'Desc')}
                         className={settings?.executor_mode === m.id ? 'active' : ''}
                         onClick={() => patch({ executor_mode: m.id })}>
                   {m.label}
@@ -145,7 +145,7 @@ export default function SettingsPanel({
               ))}
             </div>
             <div className="muted" style={{ marginTop: 6 }}>
-              当前：{settings?.executor_mode ?? '—'}
+              {t('current')}{settings?.executor_mode ?? '—'}
             </div>
           </div>
 
@@ -153,7 +153,7 @@ export default function SettingsPanel({
             <h4>{t('agentMode')}</h4>
             <div className="mode-group">
               {LLM_MODES.map((m) => (
-                <button key={m.id} title={m.desc}
+                <button key={m.id} title={t(m.id + 'Desc')}
                         className={settings?.llm_mode === m.id ? 'active' : ''}
                         onClick={() => patch({ llm_mode: m.id })}>
                   {m.label}
@@ -161,17 +161,17 @@ export default function SettingsPanel({
               ))}
             </div>
             <div className="muted" style={{ marginTop: 6 }}>
-              当前：{settings?.llm_mode ?? '—'}
+              {t('current')}{settings?.llm_mode ?? '—'}
               {settings?.llm_mode === 'real' && settings?.llm_configured === false &&
-                ' · 未配置 API Key，real 模式需先设置 API Key'}
+                ' · ' + t('notConfiguredKeyNote')}
             </div>
           </div>
 
           <div className="settings-section">
             <h4>{t('llmApiKey')}</h4>
             <div className="muted" style={{ marginBottom: 8 }}>
-              配置 OpenAI 兼容 API（默认 DeepSeek）。Key 仅保存在本机后端数据目录，不会返回前端明文。
-              状态：{settings?.llm_configured ? '已配置' : '未配置'}
+              {t('apiKeyDesc')}
+              {t('statusConfigured')}: {settings?.llm_configured ? t('statusConfigured') : t('statusNotConfigured')}
             </div>
             <div className="create-form">
               <input type="password" placeholder="API Key（sk-...）" value={apiKey}
@@ -180,17 +180,17 @@ export default function SettingsPanel({
               <input placeholder="Base URL" value={baseUrl}
                      onChange={(e) => setBaseUrl(e.target.value)}
                      style={{ minWidth: 200 }} />
-              <input placeholder="模型" value={model}
+              <input placeholder={t('modelPlaceholder')} value={model}
                      onChange={(e) => setModel(e.target.value)} />
               <button className="primary" onClick={saveApiKey} disabled={savingKey || !apiKey.trim()}>
                 保存
               </button>
               {settings?.llm_configured && (
-                <button onClick={clearApiKey} disabled={savingKey}>清除</button>
+                <button onClick={clearApiKey} disabled={savingKey}>{t('clear')}</button>
               )}
             </div>
             <div className="muted" style={{ marginTop: 6 }}>
-              当前：{settings?.llm_model ?? '—'} · {settings?.llm_base_url ?? '—'}
+              {t('current')}{settings?.llm_model ?? '—'} · {settings?.llm_base_url ?? '—'}
             </div>
           </div>
 
@@ -198,28 +198,28 @@ export default function SettingsPanel({
             <h4>{t('computeEnv')}</h4>
             <div className="flex" style={{ marginBottom: 10 }}>
               <button className="primary" onClick={discover} disabled={busy || !projectId}>
-                {busy ? '发现中…' : '本机环境发现'}
+                {busy ? t('discovering') : t('discoverLocal')}
               </button>
               <button onClick={() => { setShowRemoteForm(!showRemoteForm); setShowSSHForm(false) }}>
-                {showRemoteForm ? '取消' : '注册 Connector'}
+                {showRemoteForm ? t('cancel') : t('registerConnector')}
               </button>
               <button onClick={() => { setShowSSHForm(!showSSHForm); setShowRemoteForm(false) }}>
-                {showSSHForm ? '取消' : '注册 SSH 服务器'}
+                {showSSHForm ? t('cancel') : t('registerSSH')}
               </button>
             </div>
 
             {showRemoteForm && (
               <div className="card" style={{ marginBottom: 10 }}>
                 <div className="create-form">
-                  <input placeholder="环境名（如 Lab HPC）" value={remote.name}
+                  <input placeholder={t('envName')} value={remote.name}
                          onChange={(e) => setRemote({ ...remote, name: e.target.value })} />
-                  <input placeholder="Connector 地址" value={remote.connector_url}
+                  <input placeholder={t('connectorUrl')} value={remote.connector_url}
                          onChange={(e) => setRemote({ ...remote, connector_url: e.target.value })} />
-                  <input placeholder="共享令牌" value={remote.token}
+                  <input placeholder={t('tokenPlaceholder')} value={remote.token}
                          onChange={(e) => setRemote({ ...remote, token: e.target.value })} />
-                  <button className="primary" onClick={registerRemote} disabled={busy}>注册并握手</button>
+                  <button className="primary" onClick={registerRemote} disabled={busy}>{t('registerHandshake')}</button>
                 </div>
-                <div className="muted" style={{ marginTop: 6 }}>令牌仅用于 Connector 调用鉴权，非 SSH 凭据。</div>
+                <div className="muted" style={{ marginTop: 6 }}>{t('tokenNote')}</div>
               </div>
             )}
 
@@ -228,20 +228,20 @@ export default function SettingsPanel({
                 <div className="create-form">
                   <input placeholder="环境名（如 Lab HPC）" value={ssh.name}
                          onChange={(e) => setSSH({ ...ssh, name: e.target.value })} />
-                  <input placeholder="服务器地址（host）" value={ssh.host}
+                  <input placeholder={t('sshHostPlaceholder')} value={ssh.host}
                          onChange={(e) => setSSH({ ...ssh, host: e.target.value })} />
-                  <input placeholder="端口" value={ssh.port} style={{ width: 70 }}
+                  <input placeholder={t('portPlaceholder')} value={ssh.port} style={{ width: 70 }}
                          onChange={(e) => setSSH({ ...ssh, port: e.target.value })} />
-                  <input placeholder="账号" value={ssh.user}
+                  <input placeholder={t('account')} value={ssh.user}
                          onChange={(e) => setSSH({ ...ssh, user: e.target.value })} />
-                  <input type="password" placeholder="密码（或留空用密钥）" value={ssh.password}
+                  <input type="password" placeholder={t('passwordOrKey')} value={ssh.password}
                          onChange={(e) => setSSH({ ...ssh, password: e.target.value })} />
-                  <input placeholder="私钥路径（可选）" value={ssh.key_path}
+                  <input placeholder={t('keyPathPlaceholder')} value={ssh.key_path}
                          onChange={(e) => setSSH({ ...ssh, key_path: e.target.value })} />
-                  <button className="primary" onClick={registerSSH} disabled={busy}>注册</button>
+                  <button className="primary" onClick={registerSSH} disabled={busy}>{t('registerBtn')}</button>
                 </div>
                 <div className="muted" style={{ marginTop: 6 }}>
-                  密码加密存储于本机后端，接口不回显明文。注册时会做一次连接测试（失败仍保存，标记不可用）。
+                  {t('sshNote')}
                 </div>
               </div>
             )}
@@ -254,14 +254,14 @@ export default function SettingsPanel({
                   <span className="badge gray">{env.env_type === 'remote' ? (env.ssh_host ? 'SSH' : '远程') : '本地'}</span>
                   <span className="spacer" />
                   <button onClick={() => testEnv(env.id)} disabled={testing === env.id}>
-                    {testing === env.id ? '测试中' : '测试'}
+                    {testing === env.id ? t('testing') : t('testBtn')}
                   </button>
                 </div>
                 {env.connector_url && <div className="muted mono" style={{ marginTop: 4 }}>{env.connector_url}</div>}
                 {env.ssh_host && (
                   <div className="muted mono" style={{ marginTop: 4 }}>
                     {env.ssh_user}@{env.ssh_host}:{env.ssh_port}
-                    {env.ssh_has_password ? ' · 密码已配置' : env.ssh_key_path ? ' · 密钥已配置' : ' · 未配置凭据'}
+                    {env.ssh_has_password ? ' · ' + t('passwordConfigured') : env.ssh_key_path ? ' · ' + t('keyConfigured') : ' · ' + t('noCred')}
                   </div>
                 )}
                 <details style={{ marginTop: 8 }}>
@@ -282,14 +282,14 @@ export default function SettingsPanel({
                   </option>
                 ))}
               </select>
-              <button onClick={doResolve}>解析</button>
+              <button onClick={doResolve}>{t('resolveBtn')}</button>
             </div>
             {resolve && (
               <div style={{ marginTop: 8 }}>
                 {resolve.implementations.map((i) => (
                   <div key={i.id} className="resolve-row">
                     <span className={`badge ${i.available ? 'green' : 'red'}`}>
-                      {i.available ? '可用' : '不可用'}
+                      {i.available ? t('available') : t('unavailable')}
                     </span>
                     <span className="mono">{i.id}</span>
                     <span className="muted">({i.language})</span>
@@ -304,18 +304,18 @@ export default function SettingsPanel({
             <h4>{t('system')}</h4>
             <div className="muted">
               认证模式：{settings?.auth_enabled
-                ? '已开启（注册/登录，适合共享服务器部署）'
-                : '单机模式（免登录，个人本机使用）'}
-              <div style={{ marginTop: 4 }}>切换需设置 BIOAGENT_AUTH_ENABLED=true 并重启后端。</div>
+                ? t('authOn')
+                : t('authOff')}
+              <div style={{ marginTop: 4 }}>{t('authSwitchNote')}</div>
             </div>
           </div>
 
           <div className="settings-section">
             <h4>{t('api')}</h4>
             <div className="muted">
-              接口文档：<a href="http://127.0.0.1:8000/docs" target="_blank" rel="noreferrer">Swagger UI</a> ·
+              {t('apiDocs')}<a href="http://127.0.0.1:8000/docs" target="_blank" rel="noreferrer">Swagger UI</a> ·
               <a href="http://127.0.0.1:8000/api/health" target="_blank" rel="noreferrer"> health</a>
-              <div style={{ marginTop: 4 }}>版本 {settings?.version ?? '—'}</div>
+              <div style={{ marginTop: 4 }}>{t('version')} {settings?.version ?? '—'}</div>
             </div>
           </div>
         </div>

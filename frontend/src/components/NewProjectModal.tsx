@@ -52,7 +52,7 @@ export default function NewProjectModal({
 
         {category === 'local' && (
           <div style={{ marginBottom: 14 }}>
-            <div className="muted" style={{ marginBottom: 6 }}>{t('workdir')}（用于存放分析产物）</div>
+            <div className="muted" style={{ marginBottom: 6 }}>{t('workdir')}{t('workdirHint')}</div>
             <div className="flex">
               <input placeholder={t("workdir")} value={workdir}
                      onChange={(e) => setWorkdir(e.target.value)} style={{ flex: 1 }} />
@@ -71,7 +71,7 @@ export default function NewProjectModal({
                 <option value="">{t("selectServer")}</option>
                 {servers.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name || '未命名服务器'}（{s.ssh_host || s.connector_url || 'Connector'}）
+                    {s.name || t('unnamedServer')}（{s.ssh_host || s.connector_url || 'Connector'}）
                   </option>
                 ))}
               </select>
@@ -79,7 +79,7 @@ export default function NewProjectModal({
             </div>
             {showAddServer && <AddServerForm onAdded={(env) => { setServers([env, ...servers]); setServerId(env.id); setShowAddServer(false) }} />}
             <div className="muted" style={{ margin: '10px 0 6px' }}>{t('serverWorkdir')}</div>
-            <input placeholder="如 /data/bioagent/project_xxx 或相对路径" value={serverWorkdir}
+            <input placeholder={t("serverWorkdirPlaceholder")} value={serverWorkdir}
                    onChange={(e) => setServerWorkdir(e.target.value)} style={{ width: '100%' }} />
           </div>
         )}
@@ -94,6 +94,7 @@ export default function NewProjectModal({
 }
 
 function DirPicker({ onPick }: { onPick: (p: string) => void }) {
+  const { t } = useI18n()
   const [cur, setCur] = useState('/Users/robin/Desktop')
   const [data, setData] = useState<{ path: string; parent: string; dirs: string[] } | null>(null)
 
@@ -103,7 +104,7 @@ function DirPicker({ onPick }: { onPick: (p: string) => void }) {
     <div className="dir-picker">
       <div className="flex" style={{ marginBottom: 8 }}>
         <span className="muted mono" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{data?.path ?? cur}</span>
-        <button className="ghost" onClick={() => data && setCur(data.parent)}>上级</button>
+        <button className="ghost" onClick={() => data && setCur(data.parent)}>{t('parent')}</button>
       </div>
       <div className="dir-list">
         {data?.dirs.map((d) => (
@@ -111,10 +112,10 @@ function DirPicker({ onPick }: { onPick: (p: string) => void }) {
             <span className="dir-icon" />{d}
           </div>
         ))}
-        {data?.dirs.length === 0 && <div className="muted" style={{ padding: 8 }}>（无子目录）</div>}
+        {data?.dirs.length === 0 && <div className="muted" style={{ padding: 8 }}>{t('noSubdir')}</div>}
       </div>
       <div className="flex" style={{ marginTop: 10, justifyContent: 'flex-end' }}>
-        <button className="primary" onClick={() => onPick(data?.path ?? cur)}>选此目录</button>
+        <button className="primary" onClick={() => onPick(data?.path ?? cur)}>{t('chooseDir')}</button>
       </div>
     </div>
   )
@@ -161,11 +162,11 @@ function AddServerForm({ onAdded }: { onAdded: (env: Environment) => void }) {
           </>
         ) : (
           <>
-            <input placeholder="Connector 地址" value={form.connector_url} onChange={(e) => setForm({ ...form, connector_url: e.target.value })} />
-            <input placeholder="令牌" value={form.token} onChange={(e) => setForm({ ...form, token: e.target.value })} />
+            <input placeholder={t("connectorUrl")} value={form.connector_url} onChange={(e) => setForm({ ...form, connector_url: e.target.value })} />
+            <input placeholder={t("tokenPlaceholder")} value={form.token} onChange={(e) => setForm({ ...form, token: e.target.value })} />
           </>
         )}
-        <button className="primary" onClick={submit} disabled={busy}>{busy ? '连接中…' : '添加'}</button>
+        <button className="primary" onClick={submit} disabled={busy}>{busy ? t('connecting') : t('add')}</button>
       </div>
     </div>
   )
