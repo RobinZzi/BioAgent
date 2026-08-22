@@ -51,8 +51,12 @@ def _detect_workflow(text: str, db: Session, conversation: Conversation) -> str 
         return "scrna.standard"
     if find_dataset(db, conversation.project_id, "bulk_rna", "raw") is not None:
         return "bulk_rna.standard"
-    if find_dataset(db, conversation.project_id, "fastq", "raw") is not None:
-        return "scrna.standard"   # 默认按单细胞（若是 bulk 下机可显式说「bulk 完整分析」）
+    # 只有 fastq：按自动识别的类型路由（10x → 单细胞；bulk → 需显式走下机流程）
+    fastq = find_dataset(db, conversation.project_id, "fastq", "raw")
+    if fastq is not None:
+        from ..services.data_type import is_10x_fastq
+        if is_10x_fastq(fastq):
+            return "scrna.standard"
     return None
 
 

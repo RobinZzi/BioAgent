@@ -402,9 +402,13 @@ def register_dataset(project_id: str, body: DatasetRegister, db: Session = Depen
         (pd / (body.name + ".meta.json")).write_text(
             '{"mock": true, "registered": true}', encoding="utf-8")
         location = str(loc)
+    meta = dict(body.metadata or {})
+    if body.dtype == "fastq" and "data_type" not in meta:
+        from ..services.data_type import detect_fastq_type
+        meta["data_type"] = detect_fastq_type(body.name)
     d = Dataset(id=new_id("ds"), project_id=p.id, name=body.name, dtype=DatasetType(body.dtype),
                 format=body.format, location=location, phase=body.phase,
-                metadata_=body.metadata)
+                metadata_=meta)
     db.add(d)
     db.commit()
     db.refresh(d)

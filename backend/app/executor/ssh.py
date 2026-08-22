@@ -116,14 +116,24 @@ class SSHExecutor(BaseExecutor):
     def _render(self, task: TaskSpec, capability: dict, remote_base: str, remote_out: str):
         impl = task.implementation
         inp = task.input_dataset_path or ""
-        if impl == "scanpy":
-            text = templates.render_scanpy_script(
-                task.capability_id, task.parameters, inp, f"{remote_out}/output.h5ad",
-                remote_out, seed=task.seed or 42)
+        if impl in ("scanpy", "celltypist"):
+            if impl == "celltypist":
+                text = templates.render_celltypist_script(
+                    task.capability_id, task.parameters, inp, f"{remote_out}/output.h5ad",
+                    remote_out, seed=task.seed or 42)
+            else:
+                text = templates.render_scanpy_script(
+                    task.capability_id, task.parameters, inp, f"{remote_out}/output.h5ad",
+                    remote_out, seed=task.seed or 42)
             return "run_scanpy.py", text, lambda rin: f"{_DEFAULT_PYTHON} {remote_base}/run_scanpy.py"
-        if impl in ("DESeq2", "edgeR"):
-            text = templates.render_deseq2_script(
-                task.parameters, inp, f"{remote_out}/deseq2_results.csv", remote_out)
+        if impl in ("DESeq2", "edgeR", "seurat"):
+            if impl == "seurat":
+                text = templates.render_seurat_script(
+                    task.capability_id, task.parameters, inp, f"{remote_out}/output.h5ad",
+                    remote_out, seed=task.seed or 42)
+            else:
+                text = templates.render_deseq2_script(
+                    task.parameters, inp, f"{remote_out}/deseq2_results.csv", remote_out)
             return "run_deseq2.R", text, lambda rin: f"{_DEFAULT_R} {remote_base}/run_deseq2.R"
         if impl == "star":
             text = templates.render_star_bash(task.parameters, inp, remote_out)

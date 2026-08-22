@@ -102,9 +102,9 @@ class LocalExecutor(BaseExecutor):
 
     def execute(self, task: TaskSpec, capability: dict) -> ExecutionResult:
         impl = task.implementation
-        if impl == "scanpy":
+        if impl in ("scanpy", "celltypist"):
             return self._run_scanpy(task, capability)
-        if impl in ("DESeq2", "edgeR"):
+        if impl in ("DESeq2", "edgeR", "seurat"):
             return self._run_r(task, capability)
         if impl in ("star", "fastqc", "cutadapt", "featureCounts", "cellranger"):
             return self._run_bash(task, capability)
@@ -125,9 +125,14 @@ class LocalExecutor(BaseExecutor):
                 "message": f"manifest 中找不到 runtime {task.runtime_id}，无法定位 python 解释器",
                 "log_tail": []})
 
-        script = templates.render_scanpy_script(
-            task.capability_id, task.parameters, task.input_dataset_path or "",
-            str(outdir / "output.h5ad"), str(outdir), seed=task.seed or 42)
+        if task.implementation == "celltypist":
+            script = templates.render_celltypist_script(
+                task.capability_id, task.parameters, task.input_dataset_path or "",
+                str(outdir / "output.h5ad"), str(outdir), seed=task.seed or 42)
+        else:
+            script = templates.render_scanpy_script(
+                task.capability_id, task.parameters, task.input_dataset_path or "",
+                str(outdir / "output.h5ad"), str(outdir), seed=task.seed or 42)
         script_path = outdir / "run_scanpy.py"
         script_path.write_text(script, encoding="utf-8")
 

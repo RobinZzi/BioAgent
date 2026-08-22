@@ -198,3 +198,62 @@ featureCounts -a {q(str(gtf))} -t {ftype} -o {q(out)} {q(input_path)}
         return render_star_bash(params, input_path, output_dir)
 
     raise ValueError(f"无 bash 模板: {impl}")
+
+
+def render_seurat_script(capability_id: str, params: dict, input_path: str,
+                         output_path: str, output_dir: str, seed: int = 42) -> str:
+    """Seurat 实现脚本（R）。读 h5ad（SeuratDisk）→ SCTransform → PCA → UMAP → 聚类。"""
+    import shlex
+    inp = shlex.quote(input_path)
+    outp = shlex.quote(output_path)
+    odir = shlex.quote(output_dir)
+    return f"""library(Seurat)
+library(SeuratDisk)
+set.seed({seed})
+SeuratDisk::Convert({inp}, dest = {odir}/.seurat_out.h5seurat, overwrite = TRUE)
+seu <- LoadH5Seurat({odir}/.seurat_out.h5seurat)
+seu <- SCTransform(seu, verbose = FALSE)
+seu <- RunPCA(seu, npcs = 50, verbose = FALSE)
+seu <- FindNeighbors(seu, dims = 1:30)
+seu <- RunUMAP(seu, dims = 1:30)
+seu <- FindClusters(seu, resolution = {params.get('resolution', 0.5)})
+print(paste('n_clusters:', length(unique(Idents(seu)))))
+png(file.path({odir}, 'umap_clusters.png'), width = 700, height = 520)
+DimPlot(seu, reduction = 'umap', label = TRUE)
+dev.off()
+SaveH5Seurat(seu, filename = {odir}/.seurat_out.h5seurat)
+"""
+
+
+def render_celltypist_script(capability_id: str, params: dict, input_path: str,
+                             output_path: str, output_dir: str, seed: int = 42) -> str:
+    """celltypist 注释脚本（Python）。"""
+    import json
+    inp = json.dumps(input_path)
+    out = json.dumps(output_path)
+    odir = json.dumps(output_dir)
+    return f"""import os
+import pandas as pd
+import anndata as ad
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import celltypist
+SEED = {seed}
+adata = ad.read_h5ad({inp})
+# 使用示例模型（可注释时指定模型路径）
+model = celltypist.models.Model.load(model=os.environ.get('CELLTYPIST_MODEL', 'Immune_All_Low.pkl'))
+pred = celltypist.annotate(adata, model=model, majority_voting=True)
+adata = pred.to_adata()
+adata.write_h5ad({out})
+labels = adata.obs.get('majority_voting', adata.obs.get('celltypist', 'unknown'))
+comp = pd.Series(labels).value_counts().reset_index()
+comp.columns = ['cell_type', 'n_cells']
+comp.to_csv(os.path.join({odir}, 'cell_composition.csv'), index=False)
+fig, ax = plt.subplots(figsize=(6,5))
+import scanpy as sc
+sc.pl.umap(adata, color='majority_voting', show=False, ax=ax) if 'majority_voting' in adata.obs else None
+fig.savefig(os.path.join({odir}, 'annotation_umap.png'), dpi=110, bbox_inches='tight')
+print('cell types:', list(comp['cell_type'])[:10])
+"""

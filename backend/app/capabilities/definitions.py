@@ -100,6 +100,7 @@ def _p(type_: str, default=None, enum=None, minimum=None, maximum=None, descript
 
 SCANPY = _impl("scanpy", "python", "conda", ["scanpy", "anndata"], default=True)
 SEURAT = _impl("seurat", "r", "renv", ["Seurat"])
+CELLTYPIST = _impl("celltypist", "python", "conda", ["celltypist"])
 DESEQ2 = _impl("DESeq2", "r", "r", ["DESeq2"], default=True)
 EDGER = _impl("edgeR", "r", "r", ["edgeR"])
 STAR_BASH = _impl("star", "bash", "shell", ["star", "samtools"], default=True)
@@ -209,7 +210,7 @@ CAPABILITIES: list[dict] = [
     ),
     _cap(
         "scrna.annotation", "细胞注释", "scrna", "scrna", "clustered", "annotated", True,
-        [SCANPY],
+        [SCANPY, CELLTYPIST],
         {"method": _p("string", "marker_based", enum=["marker_based", "celltypist"], description="注释方法")},
         {"figures": ["annotation_umap.png"], "tables": ["cell_composition.csv"], "reports": ["annotation_report.html"]},
         "基于标记基因的细胞类型注释。",
