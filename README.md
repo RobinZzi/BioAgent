@@ -25,7 +25,7 @@
 
 - **自然语言分析** / Natural language analysis
 - **多用户可选** / Optional multi-user
-- **Tool ≠ Capability**
+- **Tool ≠ Capability**（32 个能力覆盖多组学，含真实实现）
 - **真实计算环境** / Real compute environments
 - **可追溯可复现** / Traceable & reproducible
 - **LLM Agent**

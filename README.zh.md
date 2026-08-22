@@ -22,14 +22,14 @@
   → AnalysisEvent → DAG；Dataset 不可变版本链；Artifact 归属事件
 - **Capability Registry**：**32 个能力**，语言无关契约，多实现（scanpy / Seurat /
   DESeq2 / edgeR / clusterProfiler / STAR-bash / fastqc / cutadapt / featureCounts /
-  cellranger 模板化命令）；覆盖 scRNA、Bulk RNA、scATAC、空间、甲基化、WES/WGS
+  cellranger 模板化命令）；覆盖 scRNA、Bulk RNA、scATAC、空间、甲基化、WES/WGS（组学提供真实实现：scATAC/空间 Python、甲基化 methylKit、变异 GATK）
 - **数据入口（全部闭环）**：h5ad / count matrix CSV / 下机 fastq（Bulk + 10x 单细胞）/
   10x 矩阵（mtx）→ 对应分析流程
 - **环境发现**：conda envs / Python / R / 项目内 venv（`.venv*`）/ CLI 工具 /
   Slurm / GPU，生成 Manifest；远程 SSH 工具自动发现，任何探测失败不中断
 - **Executor**：异步状态机（queued → running → succeeded/failed/cancelled）
   - `mock`：预生成真实文件产物，开发/演示用
-  - `local`：scanpy / R / bash 模板真实执行（auto 模式逐个探测候选 runtime，跳过损坏环境）
+  - `local`：scanpy / Seurat / celltypist / MethylKit / GATK / R / bash 模板真实执行（auto 模式逐个探测候选 runtime，跳过损坏环境）
   - `remote`：Local Connector 协议（凭据本地化）/ **SSH 直连**（密码加密存储）
   - `slurm`：sbatch 模板 + sacct 轮询
 - **Agent Runtime**：

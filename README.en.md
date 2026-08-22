@@ -31,7 +31,7 @@ Local machine → Environment Discovery → Environment Manifest → Capability 
   Slurm / GPU → standardized Manifest; remote SSH tool auto-discovery; single-point failures never abort
 - **Executor**: async state machine (queued → running → succeeded/failed/cancelled)
   - `mock`: pre-generates real files for dev/demo/CI
-  - `local`: real scanpy / R / bash template execution (auto mode probes candidate runtimes, skips broken envs)
+  - `local`: real scanpy / Seurat / celltypist / MethylKit / GATK / R / bash template execution (auto mode probes candidate runtimes, skips broken envs)
   - `remote`: Local Connector protocol (credential-localized) / **SSH direct** (encrypted password)
   - `slurm`: sbatch template + sacct polling
 - **Agent Runtime**:
