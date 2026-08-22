@@ -22,7 +22,6 @@ function ServerIcon() {
   )
 }
 
-const DTYPE_LABEL: Record<string, string> = { local: '本地', remote: '服务器' }
 
 export default function ProjectColumn({
   projects, currentId, onSelect, onCreate, onDelete, onRefresh,
@@ -47,7 +46,7 @@ export default function ProjectColumn({
   // 服务器端项目按服务器归属分组（服务器名 + IP）
   const remoteGroups = new Map<string, Project[]>()
   for (const p of remote) {
-    const key = p.server_name ?? p.server_host ?? '未指定服务器'
+    const key = p.server_name ?? p.server_host ?? t('unnamedServer')
     if (!remoteGroups.has(key)) remoteGroups.set(key, [])
     remoteGroups.get(key)!.push(p)
   }
@@ -99,7 +98,7 @@ export default function ProjectColumn({
         {p.name}
       </div>
       <div className="meta">
-        <span className="badge gray">{DTYPE_LABEL[p.data_source] ?? p.data_source}</span>
+        <span className="badge gray">{p.data_source === 'local' ? t('local') : t('remote')}</span>
         {p.n_datasets} {t('datasets')} · {p.n_events} {t('events')}
         {p.data_source === 'remote' && p.server_host && (
           <span className="mono muted" style={{ display: 'block', marginTop: 2 }}>
@@ -120,7 +119,7 @@ export default function ProjectColumn({
   return (
     <div className="col">
       <div className="col-header">
-        <span>项目</span>
+        <span>{t('projects')}</span>
         <span className="spacer" />
         {manage ? (
           <>

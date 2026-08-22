@@ -183,7 +183,7 @@ export default function SettingsPanel({
               <input placeholder={t('modelPlaceholder')} value={model}
                      onChange={(e) => setModel(e.target.value)} />
               <button className="primary" onClick={saveApiKey} disabled={savingKey || !apiKey.trim()}>
-                保存
+                {t('save')}
               </button>
               {settings?.llm_configured && (
                 <button onClick={clearApiKey} disabled={savingKey}>{t('clear')}</button>
@@ -226,7 +226,7 @@ export default function SettingsPanel({
             {showSSHForm && (
               <div className="card" style={{ marginBottom: 10 }}>
                 <div className="create-form">
-                  <input placeholder="环境名（如 Lab HPC）" value={ssh.name}
+                  <input placeholder={t('envName')} value={ssh.name}
                          onChange={(e) => setSSH({ ...ssh, name: e.target.value })} />
                   <input placeholder={t('sshHostPlaceholder')} value={ssh.host}
                          onChange={(e) => setSSH({ ...ssh, host: e.target.value })} />
@@ -251,7 +251,7 @@ export default function SettingsPanel({
                 <div className="flex">
                   <b>{env.name}</b>
                   <span className={`badge ${env.status === 'healthy' ? 'green' : 'amber'}`}>{env.status}</span>
-                  <span className="badge gray">{env.env_type === 'remote' ? (env.ssh_host ? 'SSH' : '远程') : '本地'}</span>
+                  <span className="badge gray">{env.env_type === 'remote' ? (env.ssh_host ? 'SSH' : t('remote')) : '本地'}</span>
                   <span className="spacer" />
                   <button onClick={() => testEnv(env.id)} disabled={testing === env.id}>
                     {testing === env.id ? t('testing') : t('testBtn')}
@@ -303,7 +303,7 @@ export default function SettingsPanel({
           <div className="settings-section">
             <h4>{t('system')}</h4>
             <div className="muted">
-              认证模式：{settings?.auth_enabled
+              {t('authMode')}: {settings?.auth_enabled
                 ? t('authOn')
                 : t('authOff')}
               <div style={{ marginTop: 4 }}>{t('authSwitchNote')}</div>
