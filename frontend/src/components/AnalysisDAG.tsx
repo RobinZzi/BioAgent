@@ -1,18 +1,9 @@
 import { useState } from 'react'
 import { api } from '../api'
 import type { Dag, DagNode } from '../types'
+import { useI18n } from '../i18n'
+import { capLabel } from '../capNames'
 
-const CAP_LABEL: Record<string, string> = {
-  'scrna.inspect': '数据检查', 'scrna.qc': '细胞 QC', 'scrna.normalization': '标准化',
-  'scrna.hvg': '高变基因', 'scrna.pca': 'PCA', 'scrna.neighbors': '邻接图',
-  'scrna.umap': 'UMAP', 'scrna.clustering': '聚类', 'scrna.marker_genes': '标记基因',
-  'scrna.annotation': '细胞注释',
-  'bulk_rna.inspect': '数据检查', 'bulk_rna.qc': 'QC', 'bulk_rna.normalization': '标准化',
-  'bulk_rna.fastqc': 'FastQC', 'bulk_rna.trimming': '去接头裁切',
-  'bulk_rna.alignment': '序列比对', 'bulk_rna.quantification': '基因定量',
-  'bulk_rna.differential_expression': '差异表达', 'bulk_rna.volcano': '火山图',
-  'bulk_rna.heatmap': '热图', 'bulk_rna.go_enrichment': 'GO 富集', 'bulk_rna.gsea': 'GSEA',
-}
 
 export default function AnalysisDAG({
   dag, selectedEventId, onSelect, onRefresh,
@@ -28,10 +19,11 @@ export default function AnalysisDAG({
   onCompare: () => void
   onCloseCompare: () => void
 }) {
+  const { t, lang } = useI18n()
   const [rerunning, setRerunning] = useState<string | null>(null)
 
   if (!dag || dag.nodes.length === 0) {
-    return <div className="empty">还没有分析事件。在对话中发出第一个分析请求，例如「聚类，分辨率 0.5」。</div>
+    return <div className="empty">{t('noEvent')}</div>
   }
 
   const maxDepth = Math.max(0, ...dag.nodes.map((n) => dag.depth[n.id] ?? 0))
@@ -51,14 +43,14 @@ export default function AnalysisDAG({
     if (parents.length === 0) return ''
     const names = parents.map((p) => {
       const pn = nodeById.get(p.id)
-      const label = pn ? (CAP_LABEL[pn.capability_id] ?? pn.capability_id) : p.id.slice(0, 10)
-      return p.relation === 're_run' ? `${label}(重跑)` : label
+      const label = pn ? (capLabel(pn.capability_id, lang)) : p.id.slice(0, 10)
+      return p.relation === 're_run' ? `${label}(${t('rerunShort')})` : label
     })
     return names.join(' + ')
   }
 
   const rerun = async (node: DagNode) => {
-    if (!confirm(`重跑事件 ${node.capability_id}（参数默认为原参数）？新事件将以 re_run 边挂到 DAG。`)) return
+    if (!confirm(`${t('rerunConfirm')} ${node.capability_id}`)) return
     setRerunning(node.id)
     try {
       await api.rerunEvent(node.id, {})
@@ -87,18 +79,18 @@ export default function AnalysisDAG({
   return (
     <div>
       <div className="flex" style={{ padding: '10px 14px 0' }}>
-        <span className="muted">依赖边由数据集版本链推导，重跑以 re_run 边标记（fork）</span>
+        <span className="muted">{t('dagLegend')}</span>
         <span className="spacer" />
         {compareMode ? (
           <>
-            <span className="muted">已选 {compareIds.length} 个事件</span>
+            <span className="muted">{t('selectedCount')} {compareIds.length}</span>
             <button className="primary" onClick={onCompare} disabled={compareIds.length < 2}>
-              对比
+              {t('compare')}
             </button>
-            <button onClick={onCloseCompare}>取消</button>
+            <button onClick={onCloseCompare}>{t('cancel')}</button>
           </>
         ) : (
-          <button onClick={onCloseCompare}>对比事件</button>
+          <button onClick={onCloseCompare}>{t('compareEvents')}</button>
         )}
       </div>
 
@@ -107,7 +99,7 @@ export default function AnalysisDAG({
           <div key={depth} style={{ display: 'contents' }}>
             {depth > 0 && <div className="dag-layer-arrow" aria-hidden="true" />}
             <div className="dag-layer">
-              <div className="dag-layer-label">步骤 {depth}</div>
+              <div className="dag-layer-label">{t('step')} {depth}</div>
               {layer.map((n) => (
                 <div key={n.id}
                      className={`dag-node ${statusClass(n.status)} ${(n.id === selectedEventId || compareIds.includes(n.id)) ? 'selected' : ''}`}
@@ -119,7 +111,7 @@ export default function AnalysisDAG({
                              onChange={() => onToggleCompare(n.id)}
                              onClick={(e) => e.stopPropagation()} />
                     )}
-                    {CAP_LABEL[n.capability_id] ?? n.capability_id}
+                    {capLabel(n.capability_id, lang)}
                   </div>
                   <div className="meta">
                     <span className="mono">{n.id.slice(0, 14)}</span> · impl: {n.implementation}
@@ -127,7 +119,7 @@ export default function AnalysisDAG({
                   {paramSummary(n) && <div className="meta mono">{paramSummary(n)}</div>}
                   {depsLabel(n) && (
                     <div className="meta" style={{ color: 'var(--text-faint)' }}>
-                      依赖: {depsLabel(n)}
+                      {t('deps')}: {depsLabel(n)}
                     </div>
                   )}
                   <div className="actions">
@@ -136,7 +128,7 @@ export default function AnalysisDAG({
                   </span>
                   {n.status === 'succeeded' && !compareMode && (
                     <button onClick={(e) => { e.stopPropagation(); rerun(n) }} disabled={rerunning === n.id}>
-                      重跑
+                      {t('rerun')}
                     </button>
                   )}
                 </div>

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react'
 
-type Lang = 'zh' | 'en'
+export type Lang = 'zh' | 'en'
 
 const dict = {
   zh: {

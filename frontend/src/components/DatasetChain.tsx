@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { api } from '../api'
 import type { Dataset } from '../types'
+import { useI18n } from '../i18n'
 
 const PHASE_COLOR: Record<string, string> = {
   raw: 'gray', qc: 'blue', normalized: 'blue', pca: 'blue', neighbors: 'blue',
@@ -8,9 +9,7 @@ const PHASE_COLOR: Record<string, string> = {
   de: 'green', aligned: 'green', trimmed: 'blue',
 }
 
-const DTYPE_LABEL: Record<string, string> = {
-  scrna: '单细胞 (h5ad)', bulk_rna: 'Bulk 矩阵 (csv)', fastq: '下机 (fastq)', other: '10x 矩阵目录 (mtx)',
-}
+
 
 export default function DatasetChain({
   datasets, projectId, onRefresh,
@@ -19,6 +18,7 @@ export default function DatasetChain({
   projectId: string
   onRefresh: () => void
 }) {
+  const { t } = useI18n()
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ name: '', dtype: 'scrna', format: 'h5ad', location: '' })
   const [showFiles, setShowFiles] = useState(false)
@@ -39,7 +39,7 @@ export default function DatasetChain({
   }
 
   const renameDataset = async (d: Dataset) => {
-    const name = window.prompt('重命名数据集', d.name)
+    const name = window.prompt(t('rename'), d.name)
     if (!name || name.trim() === d.name) return
     try { await api.patchDataset(d.id, { name: name.trim() }); onRefresh() }
     catch (e) { alert((e as Error).message) }
@@ -47,7 +47,7 @@ export default function DatasetChain({
 
   const tagDataset = async (d: Dataset) => {
     const cur = ((d.metadata as { tags?: string[] })?.tags ?? []).join(',')
-    const tags = window.prompt('标签（逗号分隔）', cur)
+    const tags = window.prompt(t('tagsPrompt'), cur)
     if (tags === null) return
     try {
       await api.patchDataset(d.id, { tags: tags.split(',').map((t) => t.trim()).filter(Boolean) })
@@ -56,7 +56,7 @@ export default function DatasetChain({
   }
 
   const removeDataset = async (d: Dataset) => {
-    if (!window.confirm(`删除数据集「${d.name}」？仅删除记录，不删除原始文件。`)) return
+    if (!window.confirm(`${t('deleteDatasetConfirm')} ${d.name}`)) return
     try { await api.deleteDataset(d.id); onRefresh() }
     catch (e) { alert((e as Error).message) }
   }
@@ -91,13 +91,13 @@ export default function DatasetChain({
   return (
     <div>
       <div className="flex" style={{ padding: '10px 14px 0' }}>
-        <span className="muted">数据集版本链（引用语义，分析不破坏原始数据）</span>
+        <span className="muted">{t('datasetChainNote')}</span>
         <span className="spacer" />
         <button onClick={() => { setShowFiles(!showFiles); if (!showFiles) loadFiles('') }}>
-          {showFiles ? '收起工作区' : '工作区文件'}
+          {showFiles ? t('collapseWorkspace') : t('workspaceFiles')}
         </button>
         <button onClick={() => setShowForm(!showForm)}>
-          {showForm ? '取消' : '注册数据集'}
+          {showForm ? t('cancel') : t('registerDataset')}
         </button>
       </div>
 
@@ -119,7 +119,7 @@ export default function DatasetChain({
               </div>
             ))}
             {fileData && fileData.dirs.length === 0 && fileData.files.length === 0 && (
-              <div className="muted" style={{ padding: 8 }}>（空工作区）</div>
+              <div className="muted" style={{ padding: 8 }}>{t('emptyWorkspace')}</div>
             )}
           </div>
         </div>
@@ -128,22 +128,22 @@ export default function DatasetChain({
       {showForm && (
         <div className="card" style={{ margin: '10px 14px' }}>
           <div className="create-form">
-            <input placeholder="文件名（如 sample_R1.fastq.gz）" value={form.name}
+            <input placeholder={t("fileName")} value={form.name}
                    onChange={(e) => setForm({ ...form, name: e.target.value })}
                    style={{ minWidth: 220 }} />
             <select value={form.dtype} onChange={(e) => dtypeChanged(e.target.value)}>
-              <option value="scrna">{DTYPE_LABEL.scrna}</option>
-              <option value="bulk_rna">{DTYPE_LABEL.bulk_rna}</option>
-              <option value="fastq">{DTYPE_LABEL.fastq}</option>
-              <option value="other">{DTYPE_LABEL.other}</option>
+              <option value="scrna">{t('scrna')}</option>
+              <option value="bulk_rna">{t('bulk_rna')}</option>
+              <option value="fastq">{t('fastq')}</option>
+              <option value="other">{t('other')}</option>
             </select>
-            <input placeholder="本地路径（留空=生成 mock 占位）" value={form.location}
+            <input placeholder={t("filePath")} value={form.location}
                    onChange={(e) => setForm({ ...form, location: e.target.value })}
                    style={{ minWidth: 220 }} />
-            <button className="primary" onClick={register}>注册</button>
+            <button className="primary" onClick={register}>{t('registerBtn')}</button>
           </div>
           <div className="muted" style={{ marginTop: 6 }}>
-            fastq 数据可继续「去接头」→「比对」→「定量」，得到 count matrix 后做差异表达。
+            {t('fastqHint')}
           </div>
         </div>
       )}
@@ -154,19 +154,19 @@ export default function DatasetChain({
             <div key={d.id} className="ds-row">
               {i > 0 && <span className="arrow">↓</span>}
               <span className={`badge ${PHASE_COLOR[d.phase] ?? 'gray'}`}>{d.phase}</span>
-              <span className="badge gray">{DTYPE_LABEL[d.dtype] ?? d.dtype}</span>
+              <span className="badge gray">{t(d.dtype)}</span>
               <span style={{ fontWeight: 500, fontSize: 12.5 }}>{d.name}</span>
               <span className="muted mono" style={{ marginLeft: 'auto' }}>{d.id.slice(0, 12)}</span>
               <span className="ds-actions">
-                <button className="ghost sm" title="重命名" onClick={() => renameDataset(d)}>改</button>
-                <button className="ghost sm" title="打标签" onClick={() => tagDataset(d)}>标</button>
-                <button className="ghost sm danger" title="删除" onClick={() => removeDataset(d)}>删</button>
+                <button className="ghost sm" title={t('rename')} onClick={() => renameDataset(d)}>{t('rename')}</button>
+                <button className="ghost sm" title={t('tag')} onClick={() => tagDataset(d)}>{t('tag')}</button>
+                <button className="ghost sm danger" title={t('delete')} onClick={() => removeDataset(d)}>{t('delete')}</button>
               </span>
             </div>
           ))}
         </div>
       ))}
-      {chains.length === 0 && <div className="empty">暂无数据集，点击「注册数据集」添加。</div>}
+      {chains.length === 0 && <div className="empty">{t('noDatasets')}</div>}
     </div>
   )
 }
