@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api'
 import type { Capability, Environment, ResolveResult, Settings } from '../types'
 import { useI18n } from '../i18n'
+import { capLabel } from '../capNames'
 
 const EXECUTOR_MODES = [
   { id: 'mock', label: 'mock', desc: '预生成合理产物，无生信环境也能完整演示' },
@@ -25,9 +26,14 @@ export default function SettingsPanel({
   onRefreshSettings: () => void
   onRefreshDetail: () => void
 }) {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const [caps, setCaps] = useState<Capability[]>([])
   const [selCap, setSelCap] = useState('scrna.clustering')
+  const formatReason = (r: string) => {
+    if (r.startsWith('缺少工具')) return t('missingTools') + r.replace('缺少工具', '').replace(':', ':') + r.substring(r.indexOf(':'))
+    if (r.startsWith('未发现环境')) return t('noEnvFound')
+    return r
+  }
   const [resolve, setResolve] = useState<ResolveResult | null>(null)
   const [busy, setBusy] = useState(false)
   const [showRemoteForm, setShowRemoteForm] = useState(false)
@@ -278,7 +284,7 @@ export default function SettingsPanel({
               <select value={selCap} onChange={(e) => setSelCap(e.target.value)} style={{ flex: 1 }}>
                 {caps.map((c) => (
                   <option key={c.capability_id} value={c.capability_id}>
-                    {c.domain} · {c.name}
+                    {c.domain} · {capLabel(c.capability_id, lang)}
                   </option>
                 ))}
               </select>
@@ -293,7 +299,7 @@ export default function SettingsPanel({
                     </span>
                     <span className="mono">{i.id}</span>
                     <span className="muted">({i.language})</span>
-                    {i.reason && <span className="muted" style={{ marginLeft: 'auto' }}>{i.reason}</span>}
+                    {i.reason && <span className="muted" style={{ marginLeft: 'auto' }}>{formatReason(i.reason)}</span>}
                   </div>
                 ))}
               </div>
