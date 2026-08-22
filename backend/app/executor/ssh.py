@@ -141,6 +141,9 @@ class SSHExecutor(BaseExecutor):
         if impl in ("fastqc", "cutadapt", "featureCounts", "cellranger"):
             text = templates.render_bash_script(impl, task.parameters, inp, remote_out)
             return f"run_{impl}.sh", text, lambda rin: f"{_DEFAULT_BASH} {remote_base}/run_{impl}.sh"
+        if impl == "gatk":
+            text = templates.render_gatk_bash(task.capability_id, task.parameters, inp, remote_out)
+            return "run_gatk.sh", text, lambda rin: f"{_DEFAULT_BASH} {remote_base}/run_gatk.sh"
         raise ValueError(f"SSH 执行器暂不支持 implementation={impl}")
 
     def _mkdir(self, sftp, path: str) -> None:

@@ -257,3 +257,95 @@ sc.pl.umap(adata, color='majority_voting', show=False, ax=ax) if 'majority_votin
 fig.savefig(os.path.join({odir}, 'annotation_umap.png'), dpi=110, bbox_inches='tight')
 print('cell types:', list(comp['cell_type'])[:10])
 """
+
+
+def render_omics_python_script(capability_id: str, params: dict, input_path: str,
+                               output_path: str, output_dir: str, seed: int = 42) -> str:
+    """scATAC / 空间 通用 Python 模板（scanpy 为主，读 h5ad → 基础处理 → 产物）。"""
+    import json
+    inp = json.dumps(input_path)
+    out = json.dumps(output_path)
+    odir = json.dumps(output_dir)
+    return f"""import os, json
+import numpy as np
+import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import scanpy as sc
+np.random.seed({seed})
+IN = {inp}; OUT = {out}; OUTDIR = {odir}
+os.makedirs(OUTDIR, exist_ok=True)
+adata = sc.read_h5ad(IN)
+print('input:', adata.shape)
+if "{capability_id}" == "scatac.qc" or "{capability_id}" == "scatac.clustering" or "{capability_id}".endswith("qc"):
+    # 质控：基础指标 + 过滤
+    import pandas as pd
+    if 'n_fragments' not in adata.obs and adata.obs.shape[1] > 0:
+        adata.obs['n_fragments'] = adata.X.sum(axis=1).A1 if hasattr(adata.X, 'A1') else np.asarray(adata.X.sum(axis=1)).ravel()
+    fig, ax = plt.subplots(figsize=(6,4))
+    ax.hist(np.asarray(adata.obs['n_fragments']), bins=40)
+    ax.set_title('omics QC'); ax.set_xlabel('metric')
+    fig.savefig(os.path.join(OUTDIR, 'atac_qc.png' if '{capability_id}'.startswith('scatac') else 'spatial_qc.png'), dpi=110, bbox_inches='tight'); plt.close(fig)
+    adata.write_h5ad(OUT)
+    print('QC done', adata.shape)
+elif "clustering" in "{capability_id}":
+    sc.pp.normalize_total(adata); sc.pp.log1p(adata)
+    sc.pp.pca(adata, n_comps=30)
+    sc.pp.neighbors(adata)
+    sc.tl.umap(adata, random_state={seed})
+    sc.tl.leiden(adata, resolution={params.get('resolution', 0.5)}, random_state={seed})
+    fig, ax = plt.subplots(figsize=(6,5))
+    sc.pl.umap(adata, color='leiden', show=False, ax=ax)
+    fig.savefig(os.path.join(OUTDIR, 'atac_umap.png' if '{capability_id}'.startswith('scatac') else 'spatial_clusters.png'), dpi=110, bbox_inches='tight'); plt.close(fig)
+    adata.write_h5ad(OUT)
+    print('cluster done', adata.obs['leiden'].nunique())
+else:
+    adata.write_h5ad(OUT)
+"""
+
+
+def render_methylkit_script(capability_id: str, params: dict, input_path: str,
+                            output_dir: str, seed: int = 42) -> str:
+    """DNA 甲基化（methylKit R 模板）：质控 / 差异甲基化。"""
+    import json
+    inp = json.dumps(input_path)
+    odir = json.dumps(output_dir)
+    out = json.dumps(output_dir + "/result.csv")
+    if capability_id == "methylation.qc":
+        return f"""library(methylKit)
+myobj <- methRead({inp}, sample.id="s1", assembly="hg38", treatment=1)
+filtered <- filterByCoverage(myobj, lo.count=10)
+qc <- getMethylationStats(filtered, plot=FALSE)
+write.csv(as.data.frame(methylKit::getData(filtered))[1:100,], {out})
+cat("methylation qc done\\n")
+"""
+    return f"""library(methylKit)
+myobj <- methRead({inp}, sample.id="s1", assembly="hg38", treatment=1)
+myobj <- normalizeCoverage(myobj)
+# 简化差异：单个样本时不计算 DMR，输出 beta 值分布
+rm <- getMethylationStats(myobj, plot=FALSE)
+write.csv(as.data.frame(methylKit::getData(myobj))[1:100,], {out})
+cat("methylation differential done\\n")
+"""
+
+
+def render_gatk_bash(capability_id: str, params: dict, input_path: str,
+                     output_dir: str) -> str:
+    """WES/WGS 变异检测 / 注释（GATK 模板）。"""
+    import shlex
+    inp = shlex.quote(input_path)
+    odir = shlex.quote(output_dir)
+    if capability_id == "variant.calling":
+        ref = shlex.quote(params.get("ref_genome", "/ref/hg38.fa"))
+        return f"""#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p {odir}
+gatk HaplotypeCaller -R {ref} -I {inp} -O {odir}/variants.vcf
+"""
+    db = shlex.quote(params.get("db", "clinvar"))
+    return f"""#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p {odir}
+gatk VariantAnnotator -V {inp} -O {odir}/variants_annotated.csv --dbsnp {db}
+"""

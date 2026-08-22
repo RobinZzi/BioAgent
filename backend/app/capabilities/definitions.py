@@ -101,6 +101,9 @@ def _p(type_: str, default=None, enum=None, minimum=None, maximum=None, descript
 SCANPY = _impl("scanpy", "python", "conda", ["scanpy", "anndata"], default=True)
 SEURAT = _impl("seurat", "r", "renv", ["Seurat"])
 CELLTYPIST = _impl("celltypist", "python", "conda", ["celltypist"])
+PY_OMICS = _impl("omics-python", "python", "conda", ["scanpy", "anndata"], default=True)
+METHYLATION_R = _impl("methylKit", "r", "r", ["methylKit"], default=True)
+GATK_BASH = _impl("gatk", "bash", "shell", ["gatk"], default=True)
 DESEQ2 = _impl("DESeq2", "r", "r", ["DESeq2"], default=True)
 EDGER = _impl("edgeR", "r", "r", ["edgeR"])
 STAR_BASH = _impl("star", "bash", "shell", ["star", "samtools"], default=True)
@@ -322,7 +325,7 @@ CAPABILITIES: list[dict] = [
     # ================================================================ 更多组学
     _cap(
         "scatac.qc", "ATAC 质控", "scatac", "scrna", "raw", "qc", True,
-        [PY_BULK],
+        [PY_OMICS],
         {"min_fragments": _p("integer", 1000, minimum=100, description="最少片段数"),
          "max_tss_enrichment": _p("number", 5, minimum=1, maximum=30, description="TSS 富集阈值")},
         {"figures": ["atac_qc.png"], "reports": ["atac_qc_report.html"]},
@@ -331,7 +334,7 @@ CAPABILITIES: list[dict] = [
     ),
     _cap(
         "scatac.clustering", "ATAC 聚类", "scatac", "scrna", "qc", "clustered", True,
-        [PY_BULK],
+        [PY_OMICS],
         {"resolution": _p("number", 0.8, enum=[0.1, 0.3, 0.5, 0.8, 1.0, 1.5, 2.0], description="聚类分辨率")},
         {"figures": ["atac_umap.png"], "reports": []},
         "scATAC-seq 峰值聚类（基于染色质开放性特征）。",
@@ -339,7 +342,7 @@ CAPABILITIES: list[dict] = [
     ),
     _cap(
         "spatial.qc", "空间质控", "spatial", "scrna", "raw", "qc", True,
-        [PY_BULK],
+        [PY_OMICS],
         {"min_genes_per_spot": _p("integer", 100, minimum=10, description="每 spot 最少基因数")},
         {"figures": ["spatial_qc.png"], "reports": []},
         "空间转录组质控：spot 基因数、组织覆盖检查。",
@@ -347,7 +350,7 @@ CAPABILITIES: list[dict] = [
     ),
     _cap(
         "spatial.clustering", "空间聚类", "spatial", "scrna", "qc", "clustered", True,
-        [PY_BULK],
+        [PY_OMICS],
         {"resolution": _p("number", 0.5, enum=[0.1, 0.3, 0.5, 0.8, 1.0, 1.5, 2.0], description="聚类分辨率")},
         {"figures": ["spatial_clusters.png"], "reports": []},
         "空间转录组 spot 聚类（结合空间位置与表达）。",
@@ -355,7 +358,7 @@ CAPABILITIES: list[dict] = [
     ),
     _cap(
         "methylation.qc", "甲基化质控", "methylation", "bulk_rna", "raw", "qc", True,
-        [PY_BULK],
+        [METHYLATION_R],
         {"min_coverage": _p("integer", 5, minimum=1, description="最小覆盖度")},
         {"figures": ["methylation_qc.png"], "reports": ["methylation_qc_report.html"]},
         "DNA 甲基化质控：CpG 覆盖、beta 值分布检查。",
@@ -363,7 +366,7 @@ CAPABILITIES: list[dict] = [
     ),
     _cap(
         "methylation.differential", "差异甲基化", "methylation", "bulk_rna", "qc", "de", False,
-        [PY_BULK],
+        [METHYLATION_R],
         {"padj_cutoff": _p("number", 0.05, minimum=0, maximum=1, description="校正 p 值阈值")},
         {"figures": ["dmp_volcano.png"], "tables": ["dmp.csv"], "reports": []},
         "差异甲基化位点/区域（DMP/DMR）分析。",
@@ -371,7 +374,7 @@ CAPABILITIES: list[dict] = [
     ),
     _cap(
         "variant.calling", "变异检测", "variant", "fastq", "aligned", "variants", True,
-        [STAR_BASH],
+        [GATK_BASH],
         {"ref_genome": _p("string", "", description="参考基因组路径"),
          "min_qual": _p("integer", 30, minimum=10, maximum=90, description="最小质量值")},
         {"tables": ["variants.vcf"], "reports": ["variant_calling_report.html"]},
@@ -380,7 +383,7 @@ CAPABILITIES: list[dict] = [
     ),
     _cap(
         "variant.annotation", "变异注释", "variant", "fastq", "variants", "annotated", False,
-        [PY_BULK],
+        [GATK_BASH],
         {"db": _p("string", "clinvar", enum=["clinvar", "gnomad", "dbsnp"], description="注释数据库")},
         {"tables": ["variants_annotated.csv"], "reports": []},
         "变异注释（ClinVar/gnomAD/dbSNP，VEP 模板）。",

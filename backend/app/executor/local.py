@@ -129,6 +129,10 @@ class LocalExecutor(BaseExecutor):
             script = templates.render_celltypist_script(
                 task.capability_id, task.parameters, task.input_dataset_path or "",
                 str(outdir / "output.h5ad"), str(outdir), seed=task.seed or 42)
+        elif task.implementation == "omics-python":
+            script = templates.render_omics_python_script(
+                task.capability_id, task.parameters, task.input_dataset_path or "",
+                str(outdir / "output.h5ad"), str(outdir), seed=task.seed or 42)
         else:
             script = templates.render_scanpy_script(
                 task.capability_id, task.parameters, task.input_dataset_path or "",
@@ -188,8 +192,12 @@ class LocalExecutor(BaseExecutor):
     def _run_bash(self, task: TaskSpec, capability: dict) -> ExecutionResult:
         outdir = Path(task.output_dir)
         outdir.mkdir(parents=True, exist_ok=True)
-        script = templates.render_bash_script(task.implementation, task.parameters,
-                                              task.input_dataset_path or "", str(outdir))
+        if task.implementation == "gatk":
+            script = templates.render_gatk_bash(task.capability_id, task.parameters,
+                                                task.input_dataset_path or "", str(outdir))
+        else:
+            script = templates.render_bash_script(task.implementation, task.parameters,
+                                                  task.input_dataset_path or "", str(outdir))
         script_path = outdir / "run.sh"
         script_path.write_text(script, encoding="utf-8")
         log_path = outdir / "execution.log"
