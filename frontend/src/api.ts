@@ -2,7 +2,7 @@
 import type {
   AgentStatus, AnalysisEvent, Artifact, Capability, Conversation, ConversationDetail,
   Dag, Dataset, Diagnosis, Environment, MessageResult, Project, ProjectDetail,
-  ResolveResult, Settings,
+  ResolveResult, RStudioHandoff, RStudioImportResult, Settings,
 } from './types'
 
 const BASE = '/api'
@@ -104,6 +104,13 @@ export const api = {
     req<AnalysisEvent>(`/events/${id}/rerun`, { method: 'POST', body: JSON.stringify({ parameters }) }),
   diagnoseEvent: (id: string) =>
     req<Diagnosis>(`/events/${id}/diagnose`, { method: 'POST' }),
+
+  // rstudio manual handoff
+  rstudioHandoff: (id: string) =>
+    req<RStudioHandoff>(`/events/${id}/rstudio`, { method: 'POST' }),
+  rstudioZipUrl: (id: string) => `${BASE}/events/${id}/rstudio/zip`,
+  rstudioImport: (id: string, body: { output_dir?: string; name?: string; dtype?: string; phase?: string } = {}) =>
+    req<RStudioImportResult>(`/events/${id}/rstudio/import`, { method: 'POST', body: JSON.stringify(body) }),
 
   // artifacts
   artifacts: (projectId: string) => req<Artifact[]>(`/projects/${projectId}/artifacts`),

@@ -2,7 +2,7 @@
 import threading
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -13,9 +13,9 @@ from ..env.discovery import discover_local
 from ..env.manifest import Manifest
 from ..services.auth import get_current_user
 from ..models import (
-    AnalysisEvent, Artifact, ComputeEnvironment, Conversation, Dataset,
-    DatasetType, EnvStatus, EnvType, EventStatus, Message, MessageRole,
-    Project, User, new_id, utcnow,
+    AnalysisEvent, Artifact, ArtifactKind, ComputeEnvironment, Conversation,
+    Dataset, DatasetType, EnvStatus, EnvType, EventLink, EventRelation,
+    EventStatus, Message, MessageRole, Project, User, new_id, utcnow,
 )
 from ..schemas import (
     ArtifactOut, CapabilityOut, ConversationOut, DagOut, DatasetOut,
@@ -881,6 +881,143 @@ def diagnose_event(event_id: str, db: Session = Depends(get_db)):
     ev = _get_event(db, event_id)
     from ..services.diagnostics import diagnose_failure
     return diagnose_failure(ev)
+
+
+@router.post("/events/{event_id}/rstudio")
+def rstudio_handoff(event_id: str, db: Session = Depends(get_db)):
+    """生成 RStudio 手动交接包（analysis.R + prior 加载器 + MANIFEST + README）。
+
+    仅支持 R 类 implementation 的事件。生成后返回包信息;产物由用户在
+    RStudio 中运行,之后通过「导入结果」端点注册回 BioAgent。
+    """
+    ev = _get_event(db, event_id)
+    impl = ev.implementation or ""
+    from ..services import rstudio as rs
+    if impl not in rs._R_IMPLS:
+        raise HTTPException(400,
+            f"当前事件 implementation={impl} 不是 R 类能力,无法生成 RStudio 交接包")
+    project = db.get(Project, ev.project_id)
+    if project is None:
+        raise HTTPException(404, f"项目不存在: {ev.project_id}")
+    info = rs.build_package(db, ev, project)
+    return info
+
+
+@router.get("/events/{event_id}/rstudio/zip")
+def rstudio_zip(event_id: str, db: Session = Depends(get_db)):
+    """下载 RStudio 交接包为 zip(便于在本地 RStudio 桌面运行)。"""
+    ev = _get_event(db, event_id)
+    impl = ev.implementation or ""
+    from ..services import rstudio as rs
+    if impl not in rs._R_IMPLS:
+        raise HTTPException(400, "该事件不是 R 类能力,没有交接包")
+    project = db.get(Project, ev.project_id)
+    info = rs.build_package(db, ev, project)
+    dest = Path(info["package_dir"]) / "rstudio_handoff.zip"
+    rs.write_zip(info, dest)
+    return FileResponse(dest, media_type="application/zip",
+                        filename=f"rstudio_handoff_{event_id}.zip")
+
+
+class RStudioImportBody(BaseModel):
+    """导入结果:从交接包输出目录扫描并注册,或显式传产物路径。"""
+    output_dir: str = ""          # 要扫描的目录(默认事件 rstudio_output)
+    name: str = ""                # 结果数据集名(可选,默认取产物名)
+    dtype: str = ""               # 结果 dtype(scrna/bulk_rna;留空则按格式推断)
+    phase: str = ""               # 结果阶段(留空用能力契约的 resulting_phase)
+
+
+@router.post("/events/{event_id}/rstudio/import")
+def rstudio_import(event_id: str, body: RStudioImportBody,
+                   db: Session = Depends(get_db)):
+    """导入 RStudio 手动分析产物,注册为新 Dataset/Artifact 并延续 DAG 链路。
+
+    手动分析成功后,用户在界面上触发「导入结果」。产物写入事件目录的
+    rstudio_output/,这里扫描并注册,并建立 DAG 链路,使下游能力可以消费这些产物。
+    """
+    ev = _get_event(db, event_id)
+    if ev.status in (EventStatus.succeeded, EventStatus.failed) and not body.output_dir:
+        # 允许对已成功/失败事件导入新的手动结果(以 event 的 rstudio_output 为准)
+        pass
+    project = db.get(Project, ev.project_id)
+    from ..services import rstudio as rs
+    from ..services.execution import project_dir
+
+    evdir = project_dir(project.id) / "events" / ev.id
+    out_dir = Path(body.output_dir) if body.output_dir else (evdir / "rstudio_output")
+
+    files = rs.scan_outputs(out_dir)
+    if not files:
+        raise HTTPException(400, f"未在 {out_dir} 找到可用产物文件(csv/h5ad/png/pdf/html/bam)")
+
+    cap = get_capability(ev.capability_id)
+    resulting_phase = (cap or {}).get("resulting_phase") or body.phase or "raw"
+    input_dataset_id = (ev.inputs or {}).get("dataset")
+    input_dataset = db.get(Dataset, input_dataset_id) if input_dataset_id else None
+
+    artifact_ids: list[str] = []
+    dataset_ids: list[str] = []
+    for p in files:
+        suffix = p.suffix.lstrip(".").lower()
+        art_kind = {"csv": ArtifactKind.csv, "png": ArtifactKind.figure,
+                    "pdf": ArtifactKind.pdf, "html": ArtifactKind.report,
+                    "h5ad": ArtifactKind.h5ad, "bam": ArtifactKind.bam}.get(suffix)
+        if art_kind is None:
+            art_kind = ArtifactKind.other
+        art = Artifact(id=new_id("art"), project_id=project.id, event_id=ev.id,
+                       kind=art_kind, name=p.name, path=str(p),
+                       mime=_mime_of(p.name), size_bytes=p.stat().st_size if p.exists() else 0)
+        db.add(art)
+        artifact_ids.append(art.id)
+
+        # 数据集:仅对 csv/h5ad 注册(它们可被下游能力消费)
+        if suffix in ("csv", "h5ad"):
+            dtype = body.dtype or ("scrna" if suffix == "h5ad" else "bulk_rna")
+            ds_name = body.name or p.stem or p.name
+            # 避免与现有同名冲突
+            base_name = ds_name; i = 2
+            while db.query(Dataset).filter(Dataset.project_id == project.id,
+                                           Dataset.name == ds_name).first():
+                ds_name = f"{base_name}_{i}"; i += 1
+            d = Dataset(id=new_id("ds"), project_id=project.id, name=ds_name,
+                        dtype=DatasetType(dtype), format="h5ad" if suffix == "h5ad" else "csv",
+                        location=str(p), phase=resulting_phase,
+                        parent_dataset_id=input_dataset.id if input_dataset else None,
+                        source_event_id=ev.id,
+                        metadata_={"phase": resulting_phase, "imported_from": "rstudio"})
+            db.add(d)
+            dataset_ids.append(d.id)
+            db.flush()
+
+    ev.output = {"datasets": dataset_ids, "artifacts": artifact_ids}
+    ev.status = EventStatus.succeeded
+    ev.finished_at = ev.finished_at or utcnow()
+    ev.metrics = {**ev.metrics, "imported_from_rstudio": True, "output_dir": str(out_dir)}
+    db.add(ev)
+
+    # DAG 边:输入数据集的产生事件 → 本事件(depends_on)
+    if input_dataset and input_dataset.source_event_id and input_dataset.source_event_id != ev.id:
+        if not db.query(EventLink).filter_by(
+                parent_event_id=input_dataset.source_event_id,
+                child_event_id=ev.id).first():
+            db.add(EventLink(id=new_id("link"),
+                             parent_event_id=input_dataset.source_event_id,
+                             child_event_id=ev.id, relation=EventRelation.depends_on))
+    db.commit()
+
+    return {
+        "event_id": event_id, "imported": True,
+        "datasets": dataset_ids, "artifacts": artifact_ids,
+        "files": [str(p) for p in files],
+    }
+
+
+def _mime_of(name: str) -> str:
+    s = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    return {"csv": "text/csv", "png": "image/png", "pdf": "application/pdf",
+            "html": "text/html", "h5ad": "application/x-hdf5",
+            "bam": "application/octet-stream", "tsv": "text/tab-separated-values",
+            "txt": "text/plain"}.get(s, "application/octet-stream")
 
 
 @router.get("/events/{event_id}/stream")

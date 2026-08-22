@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import type { AnalysisEvent, Diagnosis } from '../types'
-import { useI18n, Lang } from '../i18n'
+import type { AnalysisEvent, Diagnosis, RStudioHandoff } from '../types'
+import { useI18n } from '../i18n'
 import { capLabel } from '../capNames'
+
+const R_IMPLS = new Set(['DESeq2', 'edgeR', 'seurat', 'methylKit'])
 
 
 export default function EventDetail({ eventId, onClose, onChanged }: {
@@ -20,6 +22,11 @@ export default function EventDetail({ eventId, onClose, onChanged }: {
   const [showDiagnosis, setShowDiagnosis] = useState(false)
   const [diagnosing, setDiagnosing] = useState(false)
   const [rerunning, setRerunning] = useState(false)
+  const [handoff, setHandoff] = useState<RStudioHandoff | null>(null)
+  const [handoffErr, setHandoffErr] = useState('')
+  const [generating, setGenerating] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importMsg, setImportMsg] = useState('')
 
   useEffect(() => {
     setEv(null)
@@ -69,6 +76,35 @@ export default function EventDetail({ eventId, onClose, onChanged }: {
     } catch (e) { alert((e as Error).message) } finally { setRerunning(false) }
   }
 
+  const isR = R_IMPLS.has(ev?.implementation ?? '')
+
+  const generateHandoff = async () => {
+    setGenerating(true)
+    setHandoffErr('')
+    setImportMsg('')
+    try {
+      const h = await api.rstudioHandoff(eventId)
+      setHandoff(h)
+    } catch (e) {
+      setHandoffErr((e as Error).message)
+    } finally { setGenerating(false) }
+  }
+
+  const importResults = async () => {
+    if (!handoff) return
+    setImporting(true)
+    setImportMsg('')
+    try {
+      const r = await api.rstudioImport(eventId, {})
+      if (r.imported) {
+        setImportMsg(t('rstudioImported'))
+        onChanged?.()
+      }
+    } catch (e) {
+      setImportMsg((e as Error).message)
+    } finally { setImporting(false) }
+  }
+
   if (!ev) return <div className="empty">{t('loadingEvent')}</div>
 
   return (
@@ -84,6 +120,53 @@ export default function EventDetail({ eventId, onClose, onChanged }: {
         <button onClick={loadLogs}>{showLogs ? t('collapseLogs') : t('viewLogs')}</button>
         <button onClick={onClose}>{t('close')}</button>
       </div>
+
+      {isR && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div className="flex">
+            <b>{t('rstudioAnalyzing')}</b>
+            <span className="spacer" />
+            <button className="sm" onClick={generateHandoff} disabled={generating}>
+              {generating ? '…' : t('rstudioHandoff')}
+            </button>
+          </div>
+          {handoff && (
+            <div style={{ marginTop: 10 }}>
+              <div className="muted" style={{ marginBottom: 6 }}>
+                {t('rstudioHandoffDone')}
+              </div>
+              <div className="kv">
+                <span className="k">{t('rstudioOutputDir')}</span>
+                <span className="mono" style={{ wordBreak: 'break-all' }}>{handoff.output_dir}</span>
+              </div>
+              <div className="kv">
+                <span className="k">{t('rstudioPrior')}</span>
+                <span className="muted">{handoff.prior_datasets.length} 项</span>
+              </div>
+              <div className="flex" style={{ marginTop: 8 }}>
+                <a download href={api.rstudioZipUrl(eventId)} style={{
+                  display: 'inline-flex', alignItems: 'center', padding: '6px 14px',
+                  fontSize: 12.5, fontWeight: 500, background: 'var(--panel)',
+                  border: '1px solid var(--border-strong)', borderRadius: 8, color: 'var(--text)',
+                  boxShadow: 'var(--shadow-xs)', textDecoration: 'none',
+                }}>{t('rstudioDownload')}</a>
+                <button className="primary" onClick={importResults} disabled={importing}>
+                  {importing ? '…' : t('rstudioImport')}
+                </button>
+              </div>
+              {importMsg && (
+                <div className="muted" style={{ marginTop: 8 }}>
+                  {importMsg}
+                </div>
+              )}
+            </div>
+          )}
+          {!handoff && !generating && (
+            <div className="muted" style={{ marginTop: 6 }}>{t('rstudioImportHint')}</div>
+          )}
+          {handoffErr && <div className="muted" style={{ marginTop: 6, color: 'var(--red)' }}>{handoffErr}</div>}
+        </div>
+      )}
 
       {liveOn && (
         <div style={{ marginTop: 10 }}>

@@ -190,3 +190,29 @@ export interface Diagnosis {
   suggested_params: Record<string, unknown>
   message: string
 }
+
+export interface PriorDataset {
+  id: string
+  name: string
+  dtype: string
+  format: string
+  location: string
+  phase: string
+}
+
+export interface RStudioHandoff {
+  event_id: string
+  analysis_path: string
+  output_dir: string
+  package_dir: string
+  prior_datasets: PriorDataset[]
+  manifest: Record<string, unknown>
+}
+
+export interface RStudioImportResult {
+  event_id: string
+  imported: boolean
+  datasets: string[]
+  artifacts: string[]
+  files: string[]
+}
