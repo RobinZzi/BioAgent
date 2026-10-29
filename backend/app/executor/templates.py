@@ -101,9 +101,15 @@ def render_scanpy_script(capability_id: str, params: dict, input_path: str,
         )
     if capability_id == "scrna.marker_genes":
         return header + (
+            # scanpy 的 sc.pl.*(..., save='.png') 默认在 CWD 下创建 figures/ 子目录。
+            # 切换工作目录到 OUTDIR，确保 figures/ 生成在输出目录内，避免相对路径失效。
+            "os.chdir(OUTDIR)\n"
             "sc.tl.rank_genes_groups(adata, 'leiden', method='wilcoxon')\n"
             "sc.pl.rank_genes_groups_heatmap(adata, n_genes=%d, show=False, save='.png', swap_axes=True)\n"
-            "import shutil; shutil.move('figures/rank_genes_groups_heatmap.png', os.path.join(OUTDIR,'marker_heatmap.png'))\n"
+            "import shutil\n"
+            "_heatmap_src = os.path.join(OUTDIR, 'figures', 'rank_genes_groups_heatmap.png')\n"
+            "_heatmap_dst = os.path.join(OUTDIR, 'marker_heatmap.png')\n"
+            "if os.path.exists(_heatmap_src): shutil.move(_heatmap_src, _heatmap_dst)\n"
             "res = adata.uns['rank_genes_groups']\n"
             "import pandas as pd\n"
             "df = pd.DataFrame({k: res[k][:20] for k in res.keys()})\n"

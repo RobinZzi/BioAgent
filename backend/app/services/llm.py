@@ -109,11 +109,39 @@ def _echo_intent(content: str, context: dict) -> IntentResult | None:
     return IntentResult(cap_id, params, note, "echo")
 
 
+def _infer_domain(content: str) -> str | None:
+    """从用户消息中快速推断分析域，用于裁剪发往 LLM 的能力清单。"""
+    low = content.lower()
+    if any(k in low for k in ("bulk", "deseq", "edger", "差异表达", "转录组", "alignment", "star", "bam",
+                               "featurecounts", "fastqc", "cutadapt", "go 富集", "gsea", "火山", "热图")):
+        return "bulk_rna"
+    if any(k in low for k in ("单细胞", "scrna", "scanpy", "leiden", "umap", "seurat", "celltypist",
+                               "聚类", "cluster", "标注", "annotation", "cellranger", "10x")):
+        return "scrna"
+    if any(k in low for k in ("atac", "scatac", "染色质")):
+        return "scatac"
+    if any(k in low for k in ("空间", "spatial", "visium")):
+        return "spatial"
+    if any(k in low for k in ("甲基化", "methylation", "dmr", "dmp")):
+        return "methylation"
+    if any(k in low for k in ("变异", "variant", "wes", "wgs", "gatk", "vep")):
+        return "variant"
+    return None
+
+
 def _real_intent(content: str, context: dict) -> IntentResult | None:
     if not settings.llm_api_key:
         return None
+    # 按域裁剪能力清单，避免每次把全部 capability 发给 LLM（节省 token、降低延迟）。
+    # 若无法推断域，则发全量（兜底）。
+    domain = _infer_domain(content)
+    catalog = _capability_catalog()
+    if domain is not None:
+        filtered = [c for c in catalog if c.get("domain") == domain]
+        if filtered:
+            catalog = filtered
     prompt = json.dumps({
-        "capability_catalog": _capability_catalog(),
+        "capability_catalog": catalog,
         "context": context,
         "user_message": content,
     }, ensure_ascii=False)

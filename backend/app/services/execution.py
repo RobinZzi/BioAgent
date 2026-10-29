@@ -280,16 +280,29 @@ def create_and_run_event(
     # ---- DAG 边 ----
     _link(db, event, input_dataset, relation_parent_id, relation)
 
-    # ---- 更新会话上下文指针（评审结论：指针式上下文）----
+    # ---- 更新会话上下文指针（并发安全：使用 with_for_update 行锁，防止两个并发事件
+    #      同时写 current_phase 导致竞态；SQLite WAL 模式下退化为串行写，语义不变）----
     if dataset_ids:
         newest = db.get(Dataset, dataset_ids[-1])
-        conversation.current_dataset_id = newest.id
-        conversation.current_phase = capability.get("resulting_phase") or newest.phase
-        conversation.analysis_state = {
-            "label": _PHASE_LABEL.get(conversation.current_phase, conversation.current_phase),
-            "summary": _summarize(capability, result.metrics),
-            "capability": capability_id,
-        }
+        # 重新加载 conversation 并加行锁，确保基于最新状态更新
+        fresh_conv = (
+            db.query(type(conversation))
+            .filter_by(id=conversation.id)
+            .with_for_update()
+            .first()
+        )
+        if fresh_conv is not None:
+            fresh_conv.current_dataset_id = newest.id
+            fresh_conv.current_phase = capability.get("resulting_phase") or newest.phase
+            fresh_conv.analysis_state = {
+                "label": _PHASE_LABEL.get(fresh_conv.current_phase, fresh_conv.current_phase),
+                "summary": _summarize(capability, result.metrics),
+                "capability": capability_id,
+            }
+            # 同步回传入的 conversation 引用，保持调用方的内存状态一致
+            conversation.current_dataset_id = fresh_conv.current_dataset_id
+            conversation.current_phase = fresh_conv.current_phase
+            conversation.analysis_state = fresh_conv.analysis_state
 
     db.commit()
     db.refresh(event)

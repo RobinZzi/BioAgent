@@ -69,7 +69,9 @@ class LocalExecutor(BaseExecutor):
             return None, lines, "timeout"
         return p.returncode, lines, None
 
-    def _collect_outputs(self, output_dir: Path) -> tuple[list[ArtifactOut], list[DatasetOut], list[str]]:
+    def _collect_outputs(
+        self, output_dir: Path, resulting_phase: str | None = None
+    ) -> tuple[list[ArtifactOut], list[DatasetOut], list[str]]:
         artifacts: list[ArtifactOut] = []
         datasets: list[DatasetOut] = []
         warnings: list[str] = []
@@ -78,8 +80,11 @@ class LocalExecutor(BaseExecutor):
                 continue
             suffix = p.suffix.lstrip(".").lower()
             if suffix == "h5ad":
+                # 数据集阶段以 capability 契约的 resulting_phase 为准；
+                # execution.py 也会二次设置，这里保持一致避免中间态歧义。
+                phase = resulting_phase or "raw"
                 datasets.append(DatasetOut(name=p.name, dtype="scrna", format="h5ad",
-                                           phase="raw", location=str(p)))
+                                           phase=phase, location=str(p)))
                 artifacts.append(ArtifactOut(kind="h5ad", name=p.name, path=str(p),
                                              mime=_mime(p.name)))
             elif suffix in ("png", "pdf"):
@@ -102,11 +107,11 @@ class LocalExecutor(BaseExecutor):
 
     def execute(self, task: TaskSpec, capability: dict) -> ExecutionResult:
         impl = task.implementation
-        if impl in ("scanpy", "celltypist"):
+        if impl in ("scanpy", "celltypist", "omics-python"):
             return self._run_scanpy(task, capability)
         if impl in ("DESeq2", "edgeR", "seurat"):
             return self._run_r(task, capability)
-        if impl in ("star", "fastqc", "cutadapt", "featureCounts", "cellranger"):
+        if impl in ("star", "fastqc", "cutadapt", "featureCounts", "cellranger", "gatk"):
             return self._run_bash(task, capability)
         return ExecutionResult(ok=False, error={
             "stage": "resolve", "type": "UnsupportedImplementation",
@@ -153,11 +158,12 @@ class LocalExecutor(BaseExecutor):
                 "message": f"scanpy 脚本退出码 {code}",
                 "log_tail": log_tail}, log_lines=log_tail)
 
-        artifacts, datasets, warnings = self._collect_outputs(outdir)
+        artifacts, datasets, warnings = self._collect_outputs(
+            outdir, resulting_phase=capability.get("resulting_phase"))
         return ExecutionResult(
             ok=True, metrics={"impl": "scanpy", "warnings": warnings},
             artifacts=artifacts, datasets=datasets,
-            log_lines=(r.stdout + r.stderr).splitlines()[-30:])
+            log_lines=lines[-30:])
 
     # ------------------------------------------------------------ R
 
@@ -182,7 +188,8 @@ class LocalExecutor(BaseExecutor):
                 "stage": "execute", "type": "ScriptError",
                 "message": f"Rscript 退出码 {code}（检查是否安装 DESeq2）",
                 "log_tail": log_tail})
-        artifacts, datasets, warnings = self._collect_outputs(outdir)
+        artifacts, datasets, warnings = self._collect_outputs(
+            outdir, resulting_phase=capability.get("resulting_phase"))
         return ExecutionResult(ok=True, metrics={"impl": task.implementation},
                                artifacts=artifacts, datasets=datasets,
                                log_lines=lines[-30:])
@@ -212,7 +219,8 @@ class LocalExecutor(BaseExecutor):
                 "stage": "execute", "type": "ScriptError",
                 "message": f"STAR 脚本退出码 {code}（检查 STAR/samtools 是否安装）",
                 "log_tail": log_tail})
-        artifacts, datasets, warnings = self._collect_outputs(outdir)
+        artifacts, datasets, warnings = self._collect_outputs(
+            outdir, resulting_phase=capability.get("resulting_phase"))
         return ExecutionResult(ok=True, metrics={"impl": "star"},
                                artifacts=artifacts, datasets=datasets,
-                               log_lines=(r.stdout + r.stderr).splitlines()[-30:])
+                               log_lines=lines[-30:])

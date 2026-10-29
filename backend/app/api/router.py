@@ -1,4 +1,5 @@
 """BioAgent REST API（v0.1）。见 docs/TECHNICAL_DESIGN.md §7。"""
+import asyncio
 import threading
 from pathlib import Path
 
@@ -111,23 +112,52 @@ def _get_project(db: Session, project_id: str, user: User | None = None) -> Proj
     p = db.get(Project, project_id)
     if p is None:
         raise HTTPException(404, f"项目不存在: {project_id}")
-    if user is not None and p.owner_id is not None and p.owner_id != user.id:
+    if user is not None and not user.is_admin and p.owner_id != user.id:
         raise HTTPException(403, "无权访问该项目")
     return p
 
 
-def _get_conversation(db: Session, conv_id: str) -> Conversation:
+def _get_conversation(db: Session, conv_id: str, user: User | None = None) -> Conversation:
     c = db.get(Conversation, conv_id)
     if c is None:
         raise HTTPException(404, f"对话不存在: {conv_id}")
+    _get_project(db, c.project_id, user)
     return c
 
 
-def _get_event(db: Session, event_id: str) -> AnalysisEvent:
+def _get_event(db: Session, event_id: str, user: User | None = None) -> AnalysisEvent:
     e = db.get(AnalysisEvent, event_id)
     if e is None:
         raise HTTPException(404, f"分析事件不存在: {event_id}")
+    _get_project(db, e.project_id, user)
     return e
+
+
+def _get_environment(db: Session, env_id: str, user: User | None = None) -> ComputeEnvironment:
+    env = db.get(ComputeEnvironment, env_id)
+    if env is None:
+        raise HTTPException(404, f"环境不存在: {env_id}")
+    if env.project_id:
+        _get_project(db, env.project_id, user)
+    elif user is not None and not user.is_admin:
+        raise HTTPException(403, "只有管理员可以使用全局环境")
+    return env
+
+
+def _require_admin(user: User | None) -> None:
+    if user is not None and not user.is_admin:
+        raise HTTPException(403, "需要管理员权限")
+
+
+def _workspace_path(path: str) -> Path:
+    """把用户给出的工作区路径限制在配置的 workspace_root 内。"""
+    root = settings.workspace_root.resolve()
+    candidate = (root / path).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        raise HTTPException(400, "工作区路径必须位于允许的工作区根目录内")
+    return candidate
 
 
 # ================================================================ 健康检查
@@ -201,6 +231,7 @@ def create_project(body: ProjectCreate, db: Session = Depends(get_db),
     # 本地项目工作区：确保目录存在（可创建）
     if body.data_source == "local" and workdir:
         try:
+            workdir = str(_workspace_path(workdir))
             Path(workdir).mkdir(parents=True, exist_ok=True)
         except OSError as e:
             raise HTTPException(400, f"无法创建工作区目录: {e}")
@@ -231,6 +262,7 @@ def patch_project(project_id: str, body: ProjectPatch, db: Session = Depends(get
         wd = body.workdir.strip()
         if p.data_source == "local" and wd:
             try:
+                wd = str(_workspace_path(wd))
                 Path(wd).mkdir(parents=True, exist_ok=True)
             except OSError as e:
                 raise HTTPException(400, f"无法创建工作区目录: {e}")
@@ -241,10 +273,10 @@ def patch_project(project_id: str, body: ProjectPatch, db: Session = Depends(get
 
 
 @router.get("/fs/list")
-def fs_list(path: str = "/", db: Session = Depends(get_db)):
+def fs_list(path: str = "", db: Session = Depends(get_db),
+            user: User | None = Depends(get_current_user)):
     """目录浏览（用于本地项目工作区选择）。"""
-    import os
-    base = Path(path).expanduser()
+    base = _workspace_path(path)
     if not base.is_dir():
         return {"path": str(base), "parent": str(base.parent), "dirs": []}
     dirs = []
@@ -309,8 +341,9 @@ def project_detail(project_id: str, db: Session = Depends(get_db),
 # ================================================================ Conversations
 
 @router.post("/projects/{project_id}/conversations", response_model=ConversationOut, status_code=201)
-def create_conversation(project_id: str, db: Session = Depends(get_db)):
-    p = _get_project(db, project_id)
+def create_conversation(project_id: str, db: Session = Depends(get_db),
+                        user: User | None = Depends(get_current_user)):
+    p = _get_project(db, project_id, user)
     c = Conversation(id=new_id("conv"), project_id=p.id, title=p.name + " 分析")
     db.add(c)
     db.commit()
@@ -319,8 +352,9 @@ def create_conversation(project_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/conversations/{conv_id}", response_model=dict)
-def conversation_detail(conv_id: str, db: Session = Depends(get_db)):
-    c = _get_conversation(db, conv_id)
+def conversation_detail(conv_id: str, db: Session = Depends(get_db),
+                        user: User | None = Depends(get_current_user)):
+    c = _get_conversation(db, conv_id, user)
     msgs = db.query(Message).filter(Message.conversation_id == conv_id).order_by(
         Message.created_at.asc()).all()
     events = db.query(AnalysisEvent).filter(AnalysisEvent.conversation_id == conv_id).order_by(
@@ -335,11 +369,14 @@ def conversation_detail(conv_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/conversations/{conv_id}/messages", response_model=MessageResult)
-def send_message(conv_id: str, body: MessageSend, db: Session = Depends(get_db)):
-    c = _get_conversation(db, conv_id)
+async def send_message(conv_id: str, body: MessageSend, db: Session = Depends(get_db),
+                       user: User | None = Depends(get_current_user)):
+    c = _get_conversation(db, conv_id, user)
 
     if not body.wait:
-        # 异步：用户消息与占位助手消息立即可见，线程执行并回填
+        # 异步：用户消息与占位助手消息立即可见，后台线程执行并回填。
+        # 使用 daemon thread 而非 asyncio.to_thread，以便保留独立 DB session，
+        # 与当前请求 session 生命周期解耦。
         user_msg = Message(conversation_id=c.id, role=MessageRole.user, content=body.content)
         placeholder = Message(conversation_id=c.id, role=MessageRole.assistant,
                               content="分析执行中…（事件状态见历史面板）")
@@ -365,7 +402,10 @@ def send_message(conv_id: str, body: MessageSend, db: Session = Depends(get_db))
                                          created_at=placeholder.created_at),
             events=[])
 
-    result = agent_svc.handle_message(db, c, body.content)
+    # wait=true 同步路径：用 asyncio.to_thread 把阻塞的 agent 调用移出 event loop，
+    # 避免长时间分析（scanpy/R/STAR 等）阻塞整个 ASGI 服务。
+    # 注意：to_thread 在独立线程中执行，db session 由调用方管理，此处直接传入。
+    result = await asyncio.to_thread(agent_svc.handle_message, db, c, body.content)
     return MessageResult(
         user_message=MessageOut(id=result["user_message"].id, role="user",
                                 content=result["user_message"].content,
@@ -382,16 +422,18 @@ def send_message(conv_id: str, body: MessageSend, db: Session = Depends(get_db))
 # ================================================================ Datasets
 
 @router.get("/projects/{project_id}/datasets", response_model=list[DatasetOut])
-def list_datasets(project_id: str, db: Session = Depends(get_db)):
-    _get_project(db, project_id)
+def list_datasets(project_id: str, db: Session = Depends(get_db),
+                  user: User | None = Depends(get_current_user)):
+    _get_project(db, project_id, user)
     dss = db.query(Dataset).filter(Dataset.project_id == project_id).order_by(
         Dataset.created_at.asc()).all()
     return [_dataset_out(d) for d in dss]
 
 
 @router.post("/projects/{project_id}/datasets", response_model=DatasetOut, status_code=201)
-def register_dataset(project_id: str, body: DatasetRegister, db: Session = Depends(get_db)):
-    p = _get_project(db, project_id)
+def register_dataset(project_id: str, body: DatasetRegister, db: Session = Depends(get_db),
+                     user: User | None = Depends(get_current_user)):
+    p = _get_project(db, project_id, user)
     location = body.location
     if not location:
         # 生成 mock 占位文件
@@ -416,11 +458,13 @@ def register_dataset(project_id: str, body: DatasetRegister, db: Session = Depen
 
 
 @router.patch("/datasets/{dataset_id}", response_model=DatasetOut)
-def patch_dataset(dataset_id: str, body: DatasetPatch, db: Session = Depends(get_db)):
+def patch_dataset(dataset_id: str, body: DatasetPatch, db: Session = Depends(get_db),
+                  user: User | None = Depends(get_current_user)):
     """重命名数据集 / 打标签。"""
     d = db.get(Dataset, dataset_id)
     if d is None:
         raise HTTPException(404, f"数据集不存在: {dataset_id}")
+    _get_project(db, d.project_id, user)
     if body.name is not None:
         if not body.name.strip():
             raise HTTPException(400, "数据集名不能为空")
@@ -435,11 +479,13 @@ def patch_dataset(dataset_id: str, body: DatasetPatch, db: Session = Depends(get
 
 
 @router.delete("/datasets/{dataset_id}")
-def delete_dataset(dataset_id: str, db: Session = Depends(get_db)):
+def delete_dataset(dataset_id: str, db: Session = Depends(get_db),
+                   user: User | None = Depends(get_current_user)):
     """删除数据集记录（不删除原始文件）。先断开子数据集的版本链引用。"""
     d = db.get(Dataset, dataset_id)
     if d is None:
         raise HTTPException(404, f"数据集不存在: {dataset_id}")
+    _get_project(db, d.project_id, user)
     # 断开引用本数据集的子数据集（避免外键冲突）
     db.query(Dataset).filter(Dataset.parent_dataset_id == dataset_id).update(
         {Dataset.parent_dataset_id: None})
@@ -449,15 +495,18 @@ def delete_dataset(dataset_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/projects/{project_id}/files")
-def project_files(project_id: str, path: str = "", db: Session = Depends(get_db)):
+def project_files(project_id: str, path: str = "", db: Session = Depends(get_db),
+                  user: User | None = Depends(get_current_user)):
     """工作区文件浏览（本地项目）。path 相对工作区目录。"""
     from ..services.execution import project_dir
-    p = _get_project(db, project_id)
-    base = Path(p.workdir) if p.workdir else project_dir(project_id)
+    p = _get_project(db, project_id, user)
+    base = (Path(p.workdir) if p.workdir else project_dir(project_id)).resolve()
     if not base.is_dir():
         return {"path": str(base), "is_dir": False, "dirs": [], "files": []}
     target = (base / path).resolve() if path else base
-    if not str(target).startswith(str(base)):
+    try:
+        target.relative_to(base)
+    except ValueError:
         raise HTTPException(400, "路径越界")
     if not target.is_dir():
         return {"path": str(target), "is_dir": False, "dirs": [], "files": []}
@@ -478,8 +527,9 @@ def project_files(project_id: str, path: str = "", db: Session = Depends(get_db)
     return {"path": str(target), "is_dir": True, "dirs": dirs, "files": files}
 
 @router.post("/projects/{project_id}/environments/discover", response_model=EnvironmentOut)
-def discover_environment(project_id: str, db: Session = Depends(get_db)):
-    p = _get_project(db, project_id)
+def discover_environment(project_id: str, db: Session = Depends(get_db),
+                         user: User | None = Depends(get_current_user)):
+    p = _get_project(db, project_id, user)
     manifest = discover_local(timeout=settings.discovery_timeout)
     env = (
         db.query(ComputeEnvironment)
@@ -500,16 +550,18 @@ def discover_environment(project_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/projects/{project_id}/environments", response_model=list[EnvironmentOut])
-def list_environments(project_id: str, db: Session = Depends(get_db)):
-    _get_project(db, project_id)
+def list_environments(project_id: str, db: Session = Depends(get_db),
+                      user: User | None = Depends(get_current_user)):
+    _get_project(db, project_id, user)
     envs = db.query(ComputeEnvironment).filter(
         ComputeEnvironment.project_id == project_id).all()
     return [_env_out(e) for e in envs]
 
 
 @router.get("/servers", response_model=list[EnvironmentOut])
-def list_servers(db: Session = Depends(get_db)):
+def list_servers(db: Session = Depends(get_db), user: User | None = Depends(get_current_user)):
     """所有已链接的远程服务器环境（新建项目时选择）。"""
+    _require_admin(user)
     envs = (db.query(ComputeEnvironment)
             .filter(ComputeEnvironment.env_type == EnvType.remote)
             .order_by(ComputeEnvironment.discovered_at.desc()).all())
@@ -517,10 +569,9 @@ def list_servers(db: Session = Depends(get_db)):
 
 
 @router.post("/environments/{env_id}/rediscover", response_model=EnvironmentOut)
-def rediscover_environment(env_id: str, db: Session = Depends(get_db)):
-    env = db.get(ComputeEnvironment, env_id)
-    if env is None:
-        raise HTTPException(404, f"环境不存在: {env_id}")
+def rediscover_environment(env_id: str, db: Session = Depends(get_db),
+                           user: User | None = Depends(get_current_user)):
+    env = _get_environment(db, env_id, user)
     manifest = discover_local(timeout=settings.discovery_timeout)
     env.manifest = manifest.model_dump()
     env.status = EnvStatus.healthy if manifest.runtimes else EnvStatus.unreachable
@@ -534,10 +585,11 @@ def rediscover_environment(env_id: str, db: Session = Depends(get_db)):
 
 @router.post("/projects/{project_id}/environments/register-remote", response_model=EnvironmentOut)
 def register_remote_environment(project_id: str, body: RegisterRemoteBody,
-                                db: Session = Depends(get_db)):
+                                db: Session = Depends(get_db),
+                                user: User | None = Depends(get_current_user)):
     """注册远程 Connector：握手 /discover 获取远程 Manifest。
     后端只保存 connector_url + 共享令牌，不持有任何 SSH 凭据。"""
-    p = _get_project(db, project_id)
+    p = _get_project(db, project_id, user)
     from ..executor.remote import LocalConnectorExecutor
     probe = LocalConnectorExecutor(Path("."), body.connector_url, body.token)
     manifest_dict, err = probe.discover()
@@ -557,10 +609,11 @@ def register_remote_environment(project_id: str, body: RegisterRemoteBody,
 
 @router.post("/projects/{project_id}/environments/register-ssh", response_model=EnvironmentOut)
 def register_ssh_environment(project_id: str, body: RegisterSSHBody,
-                             db: Session = Depends(get_db)):
+                             db: Session = Depends(get_db),
+                             user: User | None = Depends(get_current_user)):
     """注册 SSH 直连环境（方案 B：后端直连）。密码加密存储，接口不回显明文。
     注册时连接并执行远程工具发现，生成 Manifest。"""
-    p = _get_project(db, project_id)
+    p = _get_project(db, project_id, user)
     from ..utils.crypto import encrypt
     ok, detail, manifest = _ssh_probe(body.host, body.port, body.user,
                                       body.password, body.key_path)
@@ -579,8 +632,10 @@ def register_ssh_environment(project_id: str, body: RegisterSSHBody,
 
 
 @router.post("/environments/register-remote", response_model=EnvironmentOut)
-def register_remote_global(body: RegisterRemoteBody, db: Session = Depends(get_db)):
+def register_remote_global(body: RegisterRemoteBody, db: Session = Depends(get_db),
+                           user: User | None = Depends(get_current_user)):
     """注册全局 Connector（新建项目时添加服务器，无需项目）。"""
+    _require_admin(user)
     from ..executor.remote import LocalConnectorExecutor
     probe = LocalConnectorExecutor(Path("."), body.connector_url, body.token)
     manifest_dict, err = probe.discover()
@@ -599,8 +654,10 @@ def register_remote_global(body: RegisterRemoteBody, db: Session = Depends(get_d
 
 
 @router.post("/environments/register-ssh", response_model=EnvironmentOut)
-def register_ssh_global(body: RegisterSSHBody, db: Session = Depends(get_db)):
+def register_ssh_global(body: RegisterSSHBody, db: Session = Depends(get_db),
+                        user: User | None = Depends(get_current_user)):
     """注册全局 SSH 服务器（新建项目时添加服务器，无需项目）。"""
+    _require_admin(user)
     from ..utils.crypto import encrypt
     ok, detail, manifest = _ssh_probe(body.host, body.port, body.user,
                                       body.password, body.key_path)
@@ -662,10 +719,9 @@ def _test_ssh(host: str, port: int, user: str, password: str, key_path: str) -> 
 
 
 @router.post("/environments/{env_id}/test")
-def test_environment(env_id: str, db: Session = Depends(get_db)):
-    env = db.get(ComputeEnvironment, env_id)
-    if env is None:
-        raise HTTPException(404, f"环境不存在: {env_id}")
+def test_environment(env_id: str, db: Session = Depends(get_db),
+                     user: User | None = Depends(get_current_user)):
+    env = _get_environment(db, env_id, user)
     if env.env_type == EnvType.remote and env.connector_url:
         from ..executor.remote import LocalConnectorExecutor
         ok, detail = LocalConnectorExecutor.test_connection(
@@ -688,11 +744,12 @@ def test_environment(env_id: str, db: Session = Depends(get_db)):
 
 @router.post("/conversations/{conv_id}/set-environment", response_model=ConversationOut)
 def set_conversation_environment(conv_id: str, body: SetEnvironmentBody,
-                                 db: Session = Depends(get_db)):
-    c = _get_conversation(db, conv_id)
-    env = db.get(ComputeEnvironment, body.environment_id)
-    if env is None:
-        raise HTTPException(404, f"环境不存在: {body.environment_id}")
+                                 db: Session = Depends(get_db),
+                                 user: User | None = Depends(get_current_user)):
+    c = _get_conversation(db, conv_id, user)
+    env = _get_environment(db, body.environment_id, user)
+    if env.project_id and env.project_id != c.project_id:
+        raise HTTPException(400, "不能为对话选择其他项目的环境")
     c.active_environment_id = env.id
     c.active_runtime_id = None
     db.commit()
@@ -733,8 +790,9 @@ class SettingsPatch(BaseModel):
 
 
 @router.patch("/settings")
-def patch_settings(body: SettingsPatch):
+def patch_settings(body: SettingsPatch, user: User | None = Depends(get_current_user)):
     """运行时切换工作模式 / Agent 模式 / LLM 配置。"""
+    _require_admin(user)
     if body.executor_mode is not None:
         if body.executor_mode not in ("mock", "auto", "local"):
             raise HTTPException(400, "executor_mode 必须是 mock/auto/local")
@@ -764,12 +822,13 @@ def patch_settings(body: SettingsPatch):
 
 
 @router.post("/agent/intent", response_model=IntentResponse)
-def agent_intent(body: IntentRequest, db: Session = Depends(get_db)):
+def agent_intent(body: IntentRequest, db: Session = Depends(get_db),
+                 user: User | None = Depends(get_current_user)):
     """意图解析调试（dry-run）：LLM → 规则引擎 → none。"""
     from ..services import llm as llm_svc
     ctx = {}
     if body.conversation_id:
-        conv = _get_conversation(db, body.conversation_id)
+        conv = _get_conversation(db, body.conversation_id, user)
         datasets = db.query(Dataset).filter(
             Dataset.project_id == conv.project_id).order_by(
             Dataset.created_at.desc()).all()
@@ -803,14 +862,14 @@ def capabilities(domain: str | None = None):
 
 @router.get("/capabilities/resolve", response_model=ResolveOut)
 def resolve_capability(capability_id: str, environment_id: str | None = None,
-                       db: Session = Depends(get_db)):
+                       db: Session = Depends(get_db), user: User | None = Depends(get_current_user)):
     cap = get_capability(capability_id)
     if cap is None:
         raise HTTPException(404, f"能力不存在: {capability_id}")
     manifest: Manifest | None = None
     if environment_id:
-        env = db.get(ComputeEnvironment, environment_id)
-        if env and env.manifest:
+        env = _get_environment(db, environment_id, user)
+        if env.manifest:
             manifest = Manifest(**env.manifest)
     results = []
     for impl in cap["implementations"]:
@@ -821,14 +880,16 @@ def resolve_capability(capability_id: str, environment_id: str | None = None,
         if manifest is None:
             reason = "未发现环境（先执行环境发现）"
         else:
-            for t in manifest.tools:
-                if t.tool_id in tools and t.status == "healthy" and t.runtime_id:
-                    runtime_id = t.runtime_id
-                    available = True
-                    break
-            if not available:
+            healthy = [t for t in manifest.tools if t.tool_id in tools and t.status == "healthy"]
+            # 一个 implementation 的所有工具须同时健康；并且有 runtime 的工具必须在同一 runtime。
+            runtime_ids = {t.runtime_id for t in healthy if t.runtime_id}
+            available = len({t.tool_id for t in healthy}) == len(tools) and len(runtime_ids) <= 1
+            if available:
+                runtime_id = next(iter(runtime_ids), None)
+            else:
                 missing = [t for t in tools if manifest.tool_status(t) != "healthy"]
-                reason = f"缺少工具: {', '.join(missing)}"
+                reason = (f"缺少工具: {', '.join(missing)}" if missing
+                          else "所需工具不在同一运行时")
         results.append({"id": impl["id"], "language": impl["language"],
                         "available": available, "runtime_id": runtime_id, "reason": reason})
     return ResolveOut(capability_id=capability_id, implementations=results)
@@ -845,26 +906,24 @@ def capability_detail(capability_id: str):
 # ================================================================ Events
 
 @router.get("/events/{event_id}", response_model=EventOut)
-def event_detail(event_id: str, db: Session = Depends(get_db)):
-    return _event_out(_get_event(db, event_id), db)
+def event_detail(event_id: str, db: Session = Depends(get_db),
+                 user: User | None = Depends(get_current_user)):
+    return _event_out(_get_event(db, event_id, user), db)
 
 
 @router.get("/events/{event_id}/logs")
-def event_logs(event_id: str):
-    ev = None
-    db = SessionLocal()
-    try:
-        ev = _get_event(db, event_id)
-        if ev.log_path and Path(ev.log_path).exists():
-            return {"event_id": event_id, "logs": Path(ev.log_path).read_text(encoding="utf-8")}
-        return {"event_id": event_id, "logs": ""}
-    finally:
-        db.close()
+def event_logs(event_id: str, db: Session = Depends(get_db),
+               user: User | None = Depends(get_current_user)):
+    ev = _get_event(db, event_id, user)
+    if ev.log_path and Path(ev.log_path).exists():
+        return {"event_id": event_id, "logs": Path(ev.log_path).read_text(encoding="utf-8")}
+    return {"event_id": event_id, "logs": ""}
 
 
 @router.post("/events/{event_id}/rerun", response_model=EventOut)
-def rerun_event(event_id: str, body: RerunBody, db: Session = Depends(get_db)):
-    original = _get_event(db, event_id)
+def rerun_event(event_id: str, body: RerunBody, db: Session = Depends(get_db),
+                user: User | None = Depends(get_current_user)):
+    original = _get_event(db, event_id, user)
     conv = db.get(Conversation, original.conversation_id)
     if conv is None:
         raise HTTPException(400, "原事件没有关联对话，无法重跑")
@@ -876,21 +935,23 @@ def rerun_event(event_id: str, body: RerunBody, db: Session = Depends(get_db)):
 
 
 @router.post("/events/{event_id}/diagnose")
-def diagnose_event(event_id: str, db: Session = Depends(get_db)):
+def diagnose_event(event_id: str, db: Session = Depends(get_db),
+                   user: User | None = Depends(get_current_user)):
     """失败诊断：分析失败原因 + 参数修正建议（错误恢复循环）。"""
-    ev = _get_event(db, event_id)
+    ev = _get_event(db, event_id, user)
     from ..services.diagnostics import diagnose_failure
     return diagnose_failure(ev)
 
 
 @router.post("/events/{event_id}/rstudio")
-def rstudio_handoff(event_id: str, db: Session = Depends(get_db)):
+def rstudio_handoff(event_id: str, db: Session = Depends(get_db),
+                    user: User | None = Depends(get_current_user)):
     """生成 RStudio 手动交接包（analysis.R + prior 加载器 + MANIFEST + README）。
 
     仅支持 R 类 implementation 的事件。生成后返回包信息;产物由用户在
     RStudio 中运行,之后通过「导入结果」端点注册回 BioAgent。
     """
-    ev = _get_event(db, event_id)
+    ev = _get_event(db, event_id, user)
     impl = ev.implementation or ""
     from ..services import rstudio as rs
     if impl not in rs._R_IMPLS:
@@ -904,9 +965,10 @@ def rstudio_handoff(event_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/events/{event_id}/rstudio/zip")
-def rstudio_zip(event_id: str, db: Session = Depends(get_db)):
+def rstudio_zip(event_id: str, db: Session = Depends(get_db),
+                user: User | None = Depends(get_current_user)):
     """下载 RStudio 交接包为 zip(便于在本地 RStudio 桌面运行)。"""
-    ev = _get_event(db, event_id)
+    ev = _get_event(db, event_id, user)
     impl = ev.implementation or ""
     from ..services import rstudio as rs
     if impl not in rs._R_IMPLS:
@@ -929,13 +991,13 @@ class RStudioImportBody(BaseModel):
 
 @router.post("/events/{event_id}/rstudio/import")
 def rstudio_import(event_id: str, body: RStudioImportBody,
-                   db: Session = Depends(get_db)):
+                   db: Session = Depends(get_db), user: User | None = Depends(get_current_user)):
     """导入 RStudio 手动分析产物,注册为新 Dataset/Artifact 并延续 DAG 链路。
 
     手动分析成功后,用户在界面上触发「导入结果」。产物写入事件目录的
     rstudio_output/,这里扫描并注册,并建立 DAG 链路,使下游能力可以消费这些产物。
     """
-    ev = _get_event(db, event_id)
+    ev = _get_event(db, event_id, user)
     if ev.status in (EventStatus.succeeded, EventStatus.failed) and not body.output_dir:
         # 允许对已成功/失败事件导入新的手动结果(以 event 的 rstudio_output 为准)
         pass
@@ -944,7 +1006,13 @@ def rstudio_import(event_id: str, body: RStudioImportBody,
     from ..services.execution import project_dir
 
     evdir = project_dir(project.id) / "events" / ev.id
-    out_dir = Path(body.output_dir) if body.output_dir else (evdir / "rstudio_output")
+    # 只允许事件目录中的手动交接输出，避免把主机任意目录注册为项目产物。
+    out_root = (evdir / "rstudio_output").resolve()
+    out_dir = (out_root / body.output_dir).resolve() if body.output_dir else out_root
+    try:
+        out_dir.relative_to(out_root)
+    except ValueError:
+        raise HTTPException(400, "output_dir 必须位于本事件的 rstudio_output 目录内")
 
     files = rs.scan_outputs(out_dir)
     if not files:
@@ -1028,7 +1096,7 @@ def event_stream(event_id: str, token: str = "", db: Session = Depends(get_db)):
     user = db.query(User).filter(User.token == token).first()
     if not user:
         raise HTTPException(401, "未认证")
-    ev = _get_event(db, event_id)
+    ev = _get_event(db, event_id, user)
     path = ev.log_path
 
     def generate():
@@ -1069,40 +1137,41 @@ def event_stream(event_id: str, token: str = "", db: Session = Depends(get_db)):
 
 
 @router.get("/projects/{project_id}/dag", response_model=DagOut)
-def project_dag(project_id: str, db: Session = Depends(get_db)):
-    _get_project(db, project_id)
+def project_dag(project_id: str, db: Session = Depends(get_db),
+                user: User | None = Depends(get_current_user)):
+    _get_project(db, project_id, user)
     return dag_svc.build_dag(db, project_id)
 
 
 # ================================================================ Artifacts
 
 @router.get("/projects/{project_id}/artifacts", response_model=list[ArtifactOut])
-def project_artifacts(project_id: str, db: Session = Depends(get_db)):
-    _get_project(db, project_id)
+def project_artifacts(project_id: str, db: Session = Depends(get_db),
+                      user: User | None = Depends(get_current_user)):
+    _get_project(db, project_id, user)
     arts = db.query(Artifact).filter(Artifact.project_id == project_id).order_by(
         Artifact.created_at.desc()).all()
     return [_artifact_out(a) for a in arts]
 
 
 @router.get("/projects/{project_id}/report")
-def project_report(project_id: str, db: Session = Depends(get_db)):
+def project_report(project_id: str, db: Session = Depends(get_db),
+                   user: User | None = Depends(get_current_user)):
     """生成并返回项目分析报告 HTML（动态生成）。"""
-    p = _get_project(db, project_id)
+    p = _get_project(db, project_id, user)
     from ..services.report import render_report_to_file
     path = render_report_to_file(db, p)
     return FileResponse(path, media_type="text/html", filename=path.name)
 
 
 @router.get("/artifacts/{artifact_id}/content")
-def artifact_content(artifact_id: str):
-    db = SessionLocal()
-    try:
-        art = db.get(Artifact, artifact_id)
-        if art is None:
-            raise HTTPException(404, f"产物不存在: {artifact_id}")
-        p = Path(art.path)
-        if not p.exists():
-            raise HTTPException(404, f"产物文件不存在: {art.path}")
-        return FileResponse(p, media_type=art.mime, filename=art.name)
-    finally:
-        db.close()
+def artifact_content(artifact_id: str, db: Session = Depends(get_db),
+                     user: User | None = Depends(get_current_user)):
+    art = db.get(Artifact, artifact_id)
+    if art is None:
+        raise HTTPException(404, f"产物不存在: {artifact_id}")
+    _get_project(db, art.project_id, user)
+    p = Path(art.path)
+    if not p.exists():
+        raise HTTPException(404, f"产物文件不存在: {art.path}")
+    return FileResponse(p, media_type=art.mime, filename=art.name)
